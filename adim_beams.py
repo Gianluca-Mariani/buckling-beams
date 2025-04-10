@@ -57,31 +57,15 @@ class BeamAnalyzer:
         self.r0 = r0
         self.r1 = r1
         self.rounding = rounding
-        self.dominant_frequencies = None
-        self.dominant_amplitudes = None
 
-    # Using vmap for parallelized FFT computation
-    def fft(self, i_array, plot_bool=True, N_max=100):
-        ts = self.sol.ts
-        ys = self.sol.ys
-        N = len(ts)
-        T = ts[1] - ts[0]
-        xf = fftfreq(N, T)[:N // 2]
 
-        # Using vmap to compute FFT for each signal in i_array in parallel
-        fft_results = jax.vmap(lambda i: compute_fft(ys[:, i]))(i_array)
+def fft(self, i_array):
+    xf, fft_results, freqs, amps = fft_sol_from_grid(self.sol, i_array)
+    self.xf = xf
+    self.fft_results = fft_results
+    self.dominant_frequencies = freqs
+    self.dominant_amplitudes = amps
 
-        self.dominant_frequencies = jnp.array([jnp.abs(xf[jnp.argmax(jnp.abs(yf[:N//2]))]) for _, yf in fft_results])
-        self.dominant_amplitudes = jnp.array([2.0 / N * jnp.abs(yf[jnp.argmax(jnp.abs(yf[:N//2]))]) for _, yf in fft_results])
-
-        if plot_bool:
-            for idx, i in enumerate(i_array):
-                plt.figure()
-                plt.plot(2 * jnp.pi * xf[:N_max], (2.0 / N * jnp.abs(fft_results[idx][1][:N // 2]))[:N_max])
-                plt.title(fr"FFT $x_{i}$ ($\Omega={self.omega:.2f}$, $r_0={self.r0:.2f}$, $r_1={self.r1:.2f}$)")
-                plt.xlabel(r"Frequency $\omega$")
-                plt.ylabel("Amplitude")
-                plt.grid(True)
 
     def time_series(self, i_array, limits=True):
         ts, ys = self.sol.ts, self.sol.ys
