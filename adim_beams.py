@@ -2,14 +2,52 @@
 This script defines classes to simulate the propagation of a soliton along buckling beam arrays with non-dimensional parameters
 """
 
-# Import packages
-import diffrax as dfx
-import jax.numpy as jnp
+
 import jax
+import jax.numpy as jnp
+import diffrax as dfx
+from jax import vmap
+from fft_tools import fft_sol_from_grid 
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from scipy.fft import fft, fftfreq
 import time
+
+# Core class: encapsulates the system and ODE solver
+class AdimBeamSystem:
+    def __init__(self, omega, r0, r1, rounding=2):
+        self.omega = omega
+        self.r0 = r0
+        self.r1 = r1
+        self.rounding = rounding
+        self.sol = None
+
+    def phi(self, i):
+        return jnp.where((i % 4 == 0) | (i % 4 == 3), 0.0, jnp.pi)
+
+    def lagrangian(self, q, t, omega, r0, r1):
+        n = len(q)
+        time_factor = (-1)**jnp.arange(n) + r0 * jnp.sin(omega * t + self.phi(jnp.arange(n)))
+        potential_quad = 0.5 * jnp.sum(time_factor * q**2)
+        potential_quartic = 0.25 * jnp.sum(q**4)
+        q_shifted = jnp.roll(q, shift=1)
+        potential_coupling = 0.5 * r1 * jnp.sum((q - q_shifted)**2)
+        return - (potential_quad + potential_quartic + potential_coupling)
+
+    def ODEs(self, t, q, args):
+        omega, r0, r1 = args
+        # Compute the equations of motion using the Lagrangian
+        return jax.grad(self.lagrangian, argnums=0)(q, t, omega, r0, r1)
+
+    def solve(self, y0, omega, r0, r1, t_cycles=5, N_fact=2000):
+        t0 = 0.0
+        t1 = t_cycles * 2 * jnp.pi / omega
+        ts = jnp.linspace(t0, t1, N_fact)
+        args=(omega, r0, r1)
+        saveat = dfx.SaveAt(ts=ts)
+        solver = dfx.Tsit5()
+        term = dfx.ODETerm(self.ODEs)
+        sol = dfx.diffeqsolve(term, solver, t0, t1, ts[1] - ts[0], y0, saveat=saveat, args=args)
+        return sol
 
 class adim_beams:
     """
@@ -66,44 +104,6 @@ class adim_beams:
         self.sol = dfx.diffeqsolve(
             dfx.ODETerm(self.ODEs), solver, t0, t1, ts[1]-ts[0], y0, saveat=saveat, args=None
         )
-
-    def fft_sol(self, i_array, plot_bool=True, N_max=100):
-        """Computes fft of the selected solution components"""
-        time_values = self.sol.ts
-        state_values = self.sol.ys
-        N = len(time_values)
-        T = time_values[1] - time_values[0]
-        xf = fftfreq(N, T)[:N // 2]  # Frequency bins
-        fft_results = []  # List to store FFT results
-
-        for i in i_array:
-            # Compute the FFT
-            yf = fft(state_values[:,i] - jnp.mean(state_values[:,i]))
-            fft_results.append(yf)  # Append FFT result for each component
-
-        fft_results = jnp.array(fft_results)
-
-        # Get dominant frequency and amplitude for each component
-        self.dominant_frequencies = jnp.array([
-                                    jnp.abs(xf[jnp.argmax(jnp.abs(yf[:N // 2]))]) for yf in fft_results
-                                    ])
-    
-        self.dominant_amplitudes = jnp.array([
-                                    2.0 / N * jnp.abs(yf[jnp.argmax(jnp.abs(yf[:N // 2]))]) for yf in fft_results
-                                    ])
-        
-        # Plot the FFT result
-        if plot_bool:
-            for i in range(len(i_array)):
-                fig, ax = plt.subplots()
-                ax.plot(2*jnp.pi*xf[:N_max], (2.0 / N * jnp.abs((fft_results[i])[:N // 2]))[:N_max], label="FFT Magnitude")
-                ax.set_title(fr"FFT $x_{i_array[i]}$ ($\Omega = {float(jnp.round(self.omega, self.rounding)):.2f}$, $r_0 = {float(jnp.round(self.r0, self.rounding)):.2f}$, $r_1 = {float(jnp.round(self.r1, self.rounding)):.2f}$)")
-                ax.set_xlabel(r"Frequency $\omega$")
-                ax.set_ylabel("Amplitude")
-                print(f"Dominant Frequency x_{i_array[i]} (omega = {float(jnp.round(self.omega, self.rounding)):.2f}, r_0 = {float(jnp.round(self.r0, self.rounding)):.2f}, r_1 = {float(jnp.round(self.r1, self.rounding)):.2f}): {float(self.dominant_frequencies[i]):.2f}")
-                print(f"Dominant Amplitude x_{i_array[i]} (omega = {float(jnp.round(self.omega, self.rounding)):.2f}, r_0 = {float(jnp.round(self.r0, self.rounding)):.2f}, r_1 = {float(jnp.round(self.r1, self.rounding)):.2f}): {self.dominant_amplitudes[i]}")
-                ax.grid(True)
-
 
     
     def time_series_plot(self, i_array, limits=True):
@@ -260,36 +260,3 @@ def A_vs_Omega(q1, q2, t_avg, y_avg, freq_avg, ampl_avg, params, y_curr):
     ax.legend(loc='upper right')
     ax.grid(True)
     ax.set_xscale('log')
-
-
-n=1
-y00 = jnp.array([0])
-y01 = jnp.array([1])
-y02 = jnp.array([0])
-y03 = jnp.array([1])
-y0b = jnp.concatenate([y00, y01, y02, y03])
-y0 = jnp.tile(y0b, n)
-
-
-r0s = jnp.linspace(0.2, 0.8, 3)
-r1s = jnp.array([0])
-omegas = jnp.geomspace(1, 1, 1)
-
-
-start_time = time.time()
-
-uncoupled_sweep = beam_var(omegas=omegas, r0s=r0s, r1s=r1s)
-uncoupled_sweep.solve_objects(y0)
-uncoupled_sweep.solve_ffts([0, 1, 2, 3], plot_bool=False)
-uncoupled_sweep.time_plots([1, 3], limits=True)
-uncoupled_sweep.phase_plots(1, 3, analytical=True)
-#uncoupled_sweep.vary_param(A_vs_Omega, [0, 1, 2, 3], "omega", "r0")
-
-
-end_time = time.time()
-
-execution_time = end_time - start_time
-print(f"Execution time: {execution_time:.2f} seconds")
-
-
-plt.show()
