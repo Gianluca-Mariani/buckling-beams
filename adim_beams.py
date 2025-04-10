@@ -18,8 +18,6 @@ class AdimBeamSystem:
         self.omega = omega
         self.r0 = r0
         self.r1 = r1
-        self.rounding = rounding
-        self.sol = None
 
     def phi(self, i):
         return jnp.where((i % 4 == 0) | (i % 4 == 3), 0.0, jnp.pi)
@@ -49,62 +47,59 @@ class AdimBeamSystem:
         sol = dfx.diffeqsolve(term, solver, t0, t1, ts[1] - ts[0], y0, saveat=saveat, args=args)
         return sol
 
+
+
+# BeamAnalyzer class: encapsulates the analysis and plotting
+class BeamAnalyzer:
+    def __init__(self, sol, omega, r0, r1, rounding=2):
+        self.sol = sol
+        self.omega = omega
+        self.r0 = r0
+        self.r1 = r1
+        self.rounding = rounding
+        self.dominant_frequencies = None
+        self.dominant_amplitudes = None
+
+    # Using vmap for parallelized FFT computation
+    def fft(self, i_array, plot_bool=True, N_max=100):
+        ts = self.sol.ts
+        ys = self.sol.ys
+        N = len(ts)
+        T = ts[1] - ts[0]
+        xf = fftfreq(N, T)[:N // 2]
+
+        # Using vmap to compute FFT for each signal in i_array in parallel
+        fft_results = jax.vmap(lambda i: compute_fft(ys[:, i]))(i_array)
+
+        self.dominant_frequencies = jnp.array([jnp.abs(xf[jnp.argmax(jnp.abs(yf[:N//2]))]) for _, yf in fft_results])
+        self.dominant_amplitudes = jnp.array([2.0 / N * jnp.abs(yf[jnp.argmax(jnp.abs(yf[:N//2]))]) for _, yf in fft_results])
+
+        if plot_bool:
+            for idx, i in enumerate(i_array):
+                plt.figure()
+                plt.plot(2 * jnp.pi * xf[:N_max], (2.0 / N * jnp.abs(fft_results[idx][1][:N // 2]))[:N_max])
+                plt.title(fr"FFT $x_{i}$ ($\Omega={self.omega:.2f}$, $r_0={self.r0:.2f}$, $r_1={self.r1:.2f}$)")
+                plt.xlabel(r"Frequency $\omega$")
+                plt.ylabel("Amplitude")
+                plt.grid(True)
+
+    def time_series(self, i_array, limits=True):
+        ts, ys = self.sol.ts, self.sol.ys
+        for i in i_array:
+            plt.figure()
+            plt.plot(ts, ys[:, i], label="Numerical path")
+            if limits:
+                plt.axhline(y=jnp.sqrt(1 + self.r0), color='r', linestyle='--')
+                plt.axhline(y=jnp.sqrt(1 - self.r0), color='r', linestyle='--')
+            plt.xlabel("t")
+            plt.ylabel(f"$x_{i}$")
+            plt.title(fr"$x_{i}(t)$ ($\Omega={self.omega:.2f}$, $r_0={self.r0:.2f}$, $r_1={self.r1:.2f}$)")
+            plt.legend()
+            plt.grid(True)
+
+
+
 class adim_beams:
-    """
-    Propagates a soliton through a beam array, given the adimensional parameters and initial condition
-    Requires diffrax, jax, jax.numpy and matplotlib.pyplot
-    """
-    def __init__(self, omega, r0, r1):
-        """Initialize the physical parameters"""
-        self.omega = omega    # Compression/decompression frequency
-        self.r0 = r0          # Relative comression amplitude (if r0<0 no phase transition for single beam)
-        self.r1 = r1          # Coupling vs local stiffness ratio
-        self.rounding = 2     # Rounding decimal places
-
-    def phi(self, i):
-        """Phase function: 0 if i%4 == 0 or i%4 == 3, otherwise π."""
-        return jnp.where((i % 4 == 0) | (i % 4 == 3), 0.0, jnp.pi)
-
-    def lagrangian(self, q, t):
-        """Lagrangian for an n-degree-of-freedom system with cyclic boundaries and no mass"""
-
-        # Time-dependent quadratic potential
-        time_factor = (-1) ** jnp.arange(len(q)) + self.r0 * jnp.sin(self.omega * t + self.phi(jnp.arange(len(q))))
-        potential_quad = 0.5 * jnp.sum(time_factor * q**2)
-
-        # Quartic potential
-        potential_quartic = 0.25 * jnp.sum(q**4)
-
-        # Coupling term (cyclic boundary condition)
-        q_shifted = jnp.roll(q, shift=1)  # Shift right (x[i-1] wraps around)
-        potential_coupling = 0.5 * self.r1 * jnp.sum((q - q_shifted) ** 2)
-
-        # Total potential energy
-        potential = potential_quad + potential_quartic + potential_coupling
-
-        return - potential  # L = - V
-    
-
-    def ODEs(self, t, q, args):
-        """Compute the equations of motion"""
-
-        return jax.grad(self.lagrangian, argnums=0)(q, t)  
-    
-
-    def solve_lagrangian_system(self, y0):
-        """Solves the system with the Euler-Lagrange equation and dissipation."""
-
-        solver = dfx.Tsit5()
-        t5 = 10*jnp.pi/self.omega
-        N_fact = 2000
-        t0, t1 = 0.0, t5
-        ts = jnp.linspace(t0, t1, N_fact)
-        saveat = dfx.SaveAt(ts=ts)
-
-        self.sol = dfx.diffeqsolve(
-            dfx.ODETerm(self.ODEs), solver, t0, t1, ts[1]-ts[0], y0, saveat=saveat, args=None
-        )
-
     
     def time_series_plot(self, i_array, limits=True):
         """Plots time series for solutions"""

@@ -6,7 +6,6 @@ def test_initialization():
     assert system.omega == 1.0, "omega should be 1.0"
     assert system.r0 == 0.5, "r0 should be 0.5"
     assert system.r1 == 0.3, "r1 should be 0.3"
-    assert system.rounding == 2, "rounding should be 2"
 
 def test_phi():
     # Create an instance of AdimBeamSystem
