@@ -6,47 +6,38 @@ This script defines classes to simulate the propagation of a soliton along buckl
 import jax
 import jax.numpy as jnp
 import diffrax as dfx
-from jax import vmap
 from fft_tools import fft_sol_from_grid 
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+from itertools import product
 import time
 
-# Core class: encapsulates the system and ODE solver
-class AdimBeamSystem:
-    def __init__(self, omega, r0, r1):
-        self.omega = omega
-        self.r0 = r0
-        self.r1 = r1
+# Base functions for simulating system dynamics
 
-    def phi(self, i):
-        return jnp.where((i % 4 == 0) | (i % 4 == 3), 0.0, jnp.pi)
+def phi(i):
+    return jnp.where((i % 4 == 0) | (i % 4 == 3), 0.0, jnp.pi)
 
-    def lagrangian(self, q, t, omega, r0, r1):
-        n = len(q)
-        time_factor = (-1)**jnp.arange(n) + r0 * jnp.sin(omega * t + self.phi(jnp.arange(n)))
-        potential_quad = 0.5 * jnp.sum(time_factor * q**2)
-        potential_quartic = 0.25 * jnp.sum(q**4)
-        q_shifted = jnp.roll(q, shift=1)
-        potential_coupling = 0.5 * r1 * jnp.sum((q - q_shifted)**2)
-        return - (potential_quad + potential_quartic + potential_coupling)
+def lagrangian(q, t, omega, r0, r1):
+    n = q.shape[0]
+    time_factor = (-1)**jnp.arange(n) + r0 * jnp.sin(omega * t + phi(jnp.arange(n)))
+    potential_quad = 0.5 * jnp.sum(time_factor * q**2)
+    potential_quartic = 0.25 * jnp.sum(q**4)
+    q_shifted = jnp.roll(q, shift=1)
+    potential_coupling = 0.5 * r1 * jnp.sum((q - q_shifted)**2)
+    return - (potential_quad + potential_quartic + potential_coupling)
 
-    def ODEs(self, t, q, args):
-        omega, r0, r1 = args
-        # Compute the equations of motion using the Lagrangian
-        return jax.grad(self.lagrangian, argnums=0)(q, t, omega, r0, r1)
+def ODEs(t, q, omega, r0, r1):
+    return jax.grad(lagrangian, argnums=0)(q, t, omega, r0, r1)
 
-    def solve(self, y0, omega, r0, r1, t_cycles=5, N_fact=2000):
-        t0 = 0.0
-        t1 = t_cycles * 2 * jnp.pi / omega
-        ts = jnp.linspace(t0, t1, N_fact)
-        args=(omega, r0, r1)
-        saveat = dfx.SaveAt(ts=ts)
-        solver = dfx.Tsit5()
-        term = dfx.ODETerm(self.ODEs)
-        sol = dfx.diffeqsolve(term, solver, t0, t1, ts[1] - ts[0], y0, saveat=saveat, args=args)
-        return sol
-
+def solve_system(y0, omega, r0, r1, t_cycles=5, N_fact=2000):
+    t0 = 0.0
+    t1 = t_cycles * 2 * jnp.pi / omega
+    ts = jnp.linspace(t0, t1, N_fact)
+    saveat = dfx.SaveAt(ts=ts)
+    solver = dfx.Tsit5()
+    term = dfx.ODETerm(lambda t, y, args: ODEs(t, y, *args))
+    sol = dfx.diffeqsolve(term, solver, t0, t1, ts[1] - ts[0], y0, saveat=saveat, args=(omega, r0, r1))
+    return sol
 
 
 # BeamAnalyzer class: encapsulates the analysis and plotting
@@ -127,9 +118,28 @@ class AdimBeamSystemArray:
         self.lengths = jnp.array([len(omegas), len(r0s), len(r1s)])
         self.omegas = jnp.kron(jnp.kron(omegas[:, None, None], jnp.ones(self.lengths[1])[None, :, None]), jnp.ones(self.lengths[2])[None, None, :])  # 3d array of compression/decompression frequency
         self.r0s = jnp.kron(jnp.kron(jnp.ones(self.lengths[0])[:, None, None], r0s[None, :, None]), jnp.ones(self.lengths[2])[None, None, :])        # 3d array of relative comression amplitude (if r0<0 no phase transition for single beam)        
-        self.r1s = jnp.kron(jnp.kron(jnp.ones(self.lengths[0])[:, None, None], jnp.ones(self.lengths[1])[None, :, None]), r1s[None, None, :])        # 3d array of coupling vs local stiffness ratio
-        self.beams_param = [[[AdimBeamSystem(self.omegas[i, j, k], self.r0s[i, j, k], self.r1s[i, j, k]) for k in range(self.lengths[2])]\
-               for j in range(self.lengths[1])] for i in range(self.lengths[0])]  # 3d array of adim_beams with every combination of parameters
+        self.r1s = jnp.kron(jnp.kron(jnp.ones(self.lengths[0])[:, None, None], jnp.ones(self.lengths[1])[None, :, None]), r1s[None, None, :])        # 3d array of coupling vs local stiffness ratios
+
+    
+    def solve(self, y0):
+        """
+        Solves the system of equations for all combinations of parameters
+        y0: initial conditions
+        """
+        # Create a list of parameter combinations
+        # Flatten combinations into a list
+        params = list(product(range(self.lengths[0]), range(self.lengths[1]), range(self.lengths[2])))
+
+        # You can vmap or parallelize over these
+        @jax.vmap
+        def solve_wrapper(idx):
+            i, j, k = idx
+            return self.beams_param[i][j][k].solve(y0, self.omegas[i, j, k], self.r0s[i, j, k], self.r1s[i, j, k])
+        # Unpack the results
+        results = solve_wrapper(jnp.array(params))
+
+
+
 
     def solve_objects(self, y0):
         for i in range(self.lengths[0]):
@@ -245,4 +255,18 @@ test_analyzer.plot_fft([1, 3], N_max=100)
 test_analyzer.time_series([1, 3], limits=True)
 test_analyzer.phase_portrait(1, 3, analytical=True) 
 
-plt.show()"""
+plt.show()
+
+n=1
+y00 = jnp.array([0])
+y01 = jnp.array([1])
+y02 = jnp.array([0])
+y03 = jnp.array([1])
+y0b = jnp.concatenate([y00, y01, y02, y03])
+y0 = jnp.tile(y0b, n)
+
+omegas = jnp.array([1.0, 2.0, 3.0])
+r0s = jnp.array([0.5, 0.6])
+r1s = jnp.array([0.3, 0.4])
+test_array = AdimBeamSystemArray(omegas, r0s, r1s)
+test_array.solve(y0)"""
