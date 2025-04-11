@@ -208,36 +208,34 @@ class AdimBeamSystemArray:
             q1 = indices_dict[p1]
         except:
             raise Exception("Paramater 1 type not supported")
-        
-        for y in y_arr:
-            # Convert calculated values to jax arrays, which allow better slicing
-            t_values = jnp.array([[[beam.sol.ts for beam in row] for row in layer] for layer in self.beams_param])
-            y_values = jnp.array([[[beam.sol.ys[y] for beam in row] for row in layer] for layer in self.beams_param])
-            freq_values = jnp.array([[[beam.dominant_frequencies[y] for beam in row] for row in layer] for layer in self.beams_param])
-            ampl_values = jnp.array([[[beam.dominant_amplitudes[y] for beam in row] for row in layer] for layer in self.beams_param])
             
+        if p2 == None:
+            t_avg = jnp.mean(self.ts, axis=tuple(j for j in range(3) if j != q1))
+            y_avg = jnp.mean(self.ys, axis=tuple(j for j in range(3) if j != q1))
+            freq_avg = jnp.mean(self.dominant_frequencies, axis=tuple(j for j in range(3) if j != q1))
+            ampl_avg = jnp.mean(self.dominant_amplitudes, axis=tuple(j for j in range(3) if j != q1))
+            
+
+        else:
+            try:
+                q2 = indices_dict[p2]
+            except:
+                raise Exception("Paramater 2 type not supported") 
+            
+            all_axes = [0, 1, 2]
+            fixed_axes = [q1, q2]
+            axes_to_average = [axis for axis in all_axes if axis not in fixed_axes][0]
+
+            t_avg = jnp.mean(self.ts, axis=axes_to_average)
+            y_avg = jnp.mean(self.ys, axis=axes_to_average)
+            freq_avg = jnp.mean(self.dominant_frequencies, axis=axes_to_average)
+            ampl_avg = jnp.mean(self.dominant_amplitudes, axis=axes_to_average)
+
+        for y in y_arr:
             if p2 == None:
-                t_avg = jnp.mean(t_values, axis=tuple(j for j in range(3) if j != q1))
-                y_avg = jnp.mean(y_values, axis=tuple(j for j in range(3) if j != q1))
-                freq_avg = jnp.mean(freq_values, axis=tuple(j for j in range(3) if j != q1))
-                ampl_avg = jnp.mean(ampl_values, axis=tuple(j for j in range(3) if j != q1))
-                function_to_run(q1, None, t_avg, y_avg, freq_avg, ampl_avg, [self.omegas[:, 0, 0], self.r0s[0, :, 0], self.r1s[0, 0, :]], y)
-
+                function_to_run(q1, None, t_avg, y_avg[:, :, y], freq_avg[:, y_arr.index(y)], ampl_avg[:, y_arr.index(y)], [self.omegas[:, 0, 0], self.r0s[0, :, 0], self.r1s[0, 0, :]], y)
             else:
-                try:
-                    q2 = indices_dict[p2]
-                except:
-                    raise Exception("Paramater 2 type not supported") 
-                
-                all_axes = [0, 1, 2]
-                fixed_axes = [q1, q2]
-                axes_to_average = [axis for axis in all_axes if axis not in fixed_axes][0]
-
-                t_avg = jnp.mean(t_values, axis=axes_to_average)
-                y_avg = jnp.mean(y_values, axis=axes_to_average)
-                freq_avg = jnp.mean(freq_values, axis=axes_to_average)
-                ampl_avg = jnp.mean(ampl_values, axis=axes_to_average)
-                function_to_run(q1, q2, t_avg, y_avg, freq_avg, ampl_avg, [self.omegas[:, 0, 0], self.r0s[0, :, 0], self.r1s[0, 0, :]], y)
+                function_to_run(q1, q2, t_avg, y_avg[:, :, :, y], freq_avg[:, :, y_arr.index(y)], ampl_avg[:, :, y_arr.index(y)], [self.omegas[:, 0, 0], self.r0s[0, :, 0], self.r1s[0, 0, :]], y)
 
 
 #/(jnp.sqrt(1+params[q2][i])-jnp.sqrt(1-params[q2][i]))*2
@@ -246,7 +244,7 @@ class AdimBeamSystemArray:
 def A_vs_Omega(q1, q2, t_avg, y_avg, freq_avg, ampl_avg, params, y_curr):
     fig, ax = plt.subplots() 
     if q2 == None:
-            ax.plot(params[q1], ampl_avg, label="Numerical values")
+            ax.plot(params[q1], ampl_avg, label="Numerical values", linewidth=1.0, marker='o', markersize=3)
     else:
         label1 = {0: r"$\Omega = $", 1: r"$r_0 = $", 2: r"$r_1 = $"}[q2] 
         colors = cm.magma(jnp.linspace(0.1, 0.9, len(params[q2])))
@@ -297,13 +295,13 @@ y0 = jnp.tile(y0b, n)
 
 start_time = time.time()
 
-omegas = jnp.geomspace(0.1, 10, 2)
-r0s = jnp.linspace(0.1, 0.9, 3)
-r1s = jnp.linspace(0.1, 0.9, 4)
+omegas = jnp.geomspace(0.1, 10, 100)
+r0s = jnp.linspace(0.1, 0.9, 10)
+r1s = jnp.linspace(0, 0, 1)
 test_array = AdimBeamSystemArray(omegas, r0s, r1s)
 test_array.solve(y0)
 test_array.solve_ffts([1, 3], plot_bool=False, N_max=100)
-
+test_array.vary_param(A_vs_Omega, [1, 3], "omega", "r0")
 
 end_time = time.time()
 print(end_time - start_time)
