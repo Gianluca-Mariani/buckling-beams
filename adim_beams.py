@@ -51,81 +51,54 @@ class AdimBeamSystem:
 
 # BeamAnalyzer class: encapsulates the analysis and plotting
 class BeamAnalyzer:
-    def __init__(self, sol, omega, r0, r1, rounding=2):
+    def __init__(self, sol, omega, r0, r1):
         self.sol = sol
         self.omega = omega
         self.r0 = r0
         self.r1 = r1
-        self.rounding = rounding
 
 
-def fft(self, i_array):
-    xf, fft_results, freqs, amps = fft_sol_from_grid(self.sol, i_array)
-    self.xf = xf
-    self.fft_results = fft_results
-    self.dominant_frequencies = freqs
-    self.dominant_amplitudes = amps
+    def fft(self, i_array):
+        xf, fft_results, freqs, amps = fft_sol_from_grid(self.sol, i_array)
+        self.xf = xf
+        self.fft_results = fft_results
+        self.dominant_frequencies = freqs
+        self.dominant_amplitudes = amps
 
 
     def time_series(self, i_array, limits=True):
         ts, ys = self.sol.ts, self.sol.ys
         for i in i_array:
-            plt.figure()
-            plt.plot(ts, ys[:, i], label="Numerical path")
-            if limits:
-                plt.axhline(y=jnp.sqrt(1 + self.r0), color='r', linestyle='--')
-                plt.axhline(y=jnp.sqrt(1 - self.r0), color='r', linestyle='--')
-            plt.xlabel("t")
-            plt.ylabel(f"$x_{i}$")
-            plt.title(fr"$x_{i}(t)$ ($\Omega={self.omega:.2f}$, $r_0={self.r0:.2f}$, $r_1={self.r1:.2f}$)")
-            plt.legend()
-            plt.grid(True)
-
-
-
-class adim_beams:
-    
-    def time_series_plot(self, i_array, limits=True):
-        """Plots time series for solutions"""
-        time_values = self.sol.ts
-        state_values = self.sol.ys
-        N = len(time_values)
-        T = time_values[1] - time_values[0]
-        for i in i_array:
             fig, ax = plt.subplots() 
-            ax.plot(time_values, state_values[:,i], label=f"Numerical path")
+            ax.plot(ts, ys[:, i], label="Numerical path")
             if limits:
-                ax.axhline(y=jnp.sqrt(1+self.r0), color='r', linestyle='--', label=r"$\sqrt{1 \pm r_0}$")
-                ax.axhline(y=jnp.sqrt(1-self.r0), color='r', linestyle='--')
-
+                ax.axhline(y=jnp.sqrt(1 + self.r0), color='r', linestyle='--')
+                ax.axhline(y=jnp.sqrt(1 - self.r0), color='r', linestyle='--')
             ax.set_xlabel("t")
             ax.set_ylabel(f"$x_{i}$")
-            ax.set_title(fr"$x_{i} (t)$ ($\Omega = {float(jnp.round(self.omega, self.rounding)):.2f}$, $r_0 = {float(jnp.round(self.r0, self.rounding)):.2f}$, $r_1 = {float(jnp.round(self.r1, self.rounding)):.2f}$)")
-            ax.legend(loc='upper left')
+            ax.set_title(fr"$x_{i}(t)$ ($\Omega={self.omega:.2f}$, $r_0={self.r0:.2f}$, $r_1={self.r1:.2f}$)")
+            ax.legend()
             ax.grid(True)
-    
-    
-    def phase_portrait_plot(self, i1, i2, analytical=True):
+
+    def phase_portrait(self, i1, i2, analytical=True):
         """Plots phase portraits for solutions"""
         fig, ax = plt.subplots() 
         state_values = self.sol.ys
-        if analytical:
-            time_values = self.sol.ts
-            an_sol = jnp.array([
-                jnp.zeros(len(time_values)),
-                jnp.sqrt(1+self.r0*jnp.sin(self.omega*time_values)),
-                jnp.zeros(len(time_values)),
-                jnp.sqrt(1-self.r0*jnp.sin(self.omega*time_values))
-            ])
-            ax.plot(an_sol[i1], an_sol[i2], color='r', linestyle='--', label=r"Analytical equilibrium path")
+        time_values = self.sol.ts
+        an_sol = jnp.array([
+            jnp.zeros(len(time_values)),
+            jnp.sqrt(1+self.r0*jnp.sin(self.omega*time_values)),
+            jnp.zeros(len(time_values)),
+            jnp.sqrt(1-self.r0*jnp.sin(self.omega*time_values))
+        ])
+        ax.plot(an_sol[i1], an_sol[i2], color='r', linestyle='--', label=r"Analytical equilibrium path")
         ax.plot(state_values[:,i1], state_values[:,i2], label="Numerical path")
         
         ax.set_xlabel(f"$x_{i1}$")
         ax.set_ylabel(f"$x_{i2}$")
-        ax.set_title(fr"Phase portrait on $(x_{i1},x_{i2})$ plane ($\Omega = {float(jnp.round(self.omega, self.rounding)):.2f}$, $r_0 = {float(jnp.round(self.r0, self.rounding)):.2f}$, $r_1 = {float(jnp.round(self.r1, self.rounding)):.2f}$)")
+        ax.set_title(fr"Phase portrait on $(x_{i1},x_{i2})$ plane ($\Omega = {float(jnp.round(self.omega, 2)):.2f}$, $r_0 = {float(jnp.round(self.r0, 2)):.2f}$, $r_1 = {float(jnp.round(self.r1, 2)):.2f}$)")
         ax.legend(loc='lower left')
         ax.grid(True)
-
 
 class beam_var:
     """
