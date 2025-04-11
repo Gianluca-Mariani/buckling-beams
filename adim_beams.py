@@ -114,7 +114,7 @@ class BeamAnalyzer:
         ax.legend(loc='lower left')
         ax.grid(True)
 
-class beam_var:
+class AdimBeamSystemArray:
     """
     Creates multiple instances of adim_beams, with different parameters
     Requires diffrax, jax, jax.numpy and matplotlib.pyplot
@@ -128,7 +128,7 @@ class beam_var:
         self.omegas = jnp.kron(jnp.kron(omegas[:, None, None], jnp.ones(self.lengths[1])[None, :, None]), jnp.ones(self.lengths[2])[None, None, :])  # 3d array of compression/decompression frequency
         self.r0s = jnp.kron(jnp.kron(jnp.ones(self.lengths[0])[:, None, None], r0s[None, :, None]), jnp.ones(self.lengths[2])[None, None, :])        # 3d array of relative comression amplitude (if r0<0 no phase transition for single beam)        
         self.r1s = jnp.kron(jnp.kron(jnp.ones(self.lengths[0])[:, None, None], jnp.ones(self.lengths[1])[None, :, None]), r1s[None, None, :])        # 3d array of coupling vs local stiffness ratio
-        self.beams_param = [[[adim_beams(self.omegas[i, j, k], self.r0s[i, j, k], self.r1s[i, j, k]) for k in range(self.lengths[2])]\
+        self.beams_param = [[[AdimBeamSystem(self.omegas[i, j, k], self.r0s[i, j, k], self.r1s[i, j, k]) for k in range(self.lengths[2])]\
                for j in range(self.lengths[1])] for i in range(self.lengths[0])]  # 3d array of adim_beams with every combination of parameters
 
     def solve_objects(self, y0):
@@ -228,7 +228,7 @@ def A_vs_Omega(q1, q2, t_avg, y_avg, freq_avg, ampl_avg, params, y_curr):
     ax.set_xscale('log')
 
 
-
+"""
 n=1
 y00 = jnp.array([0])
 y01 = jnp.array([1])
@@ -245,4 +245,4 @@ test_analyzer.plot_fft([1, 3], N_max=100)
 test_analyzer.time_series([1, 3], limits=True)
 test_analyzer.phase_portrait(1, 3, analytical=True) 
 
-plt.show()
+plt.show()"""
