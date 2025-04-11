@@ -14,7 +14,7 @@ import time
 
 # Core class: encapsulates the system and ODE solver
 class AdimBeamSystem:
-    def __init__(self, omega, r0, r1, rounding=2):
+    def __init__(self, omega, r0, r1):
         self.omega = omega
         self.r0 = r0
         self.r1 = r1
@@ -64,6 +64,20 @@ class BeamAnalyzer:
         self.fft_results = fft_results
         self.dominant_frequencies = freqs
         self.dominant_amplitudes = amps
+
+    def plot_fft(self, i_array, N_max=100):
+        for i in i_array:
+            fig, ax = plt.subplots() 
+            ax.plot(self.xf[:N_max], jnp.abs(self.fft_results[i][:N_max]), label="FFT")
+            ax.axvline(x=self.dominant_frequencies[i], color='r', linestyle='--', label="Dominant frequency")
+            ax.set_xlabel("Frequency")
+            ax.set_ylabel(f"FFT of $x_{i}$")
+            ax.set_title(fr"FFT of $x_{i}$ ($\Omega={self.omega:.2f}$, $r_0={self.r0:.2f}$, $r_1={self.r1:.2f}$)")
+            ax.legend()
+            ax.grid(True)
+            print(f"Dominant frequency for x_{i}: {2 * jnp.pi * self.dominant_frequencies[i]:.2f}")
+            print(f"Dominant amplitude for x_{i}: {self.dominant_amplitudes[i]:.2f}")
+        pass
 
 
     def time_series(self, i_array, limits=True):
@@ -212,3 +226,23 @@ def A_vs_Omega(q1, q2, t_avg, y_avg, freq_avg, ampl_avg, params, y_curr):
     ax.legend(loc='upper right')
     ax.grid(True)
     ax.set_xscale('log')
+
+
+
+n=1
+y00 = jnp.array([0])
+y01 = jnp.array([1])
+y02 = jnp.array([0])
+y03 = jnp.array([1])
+y0b = jnp.concatenate([y00, y01, y02, y03])
+y0 = jnp.tile(y0b, n)
+
+test = AdimBeamSystem(omega=1.0, r0=0.5, r1=0)    
+test_sol = test.solve(y0, test.omega, test.r0, test.r1, t_cycles=5, N_fact=2000)
+test_analyzer = BeamAnalyzer(test_sol, test.omega, test.r0, test.r1)
+test_analyzer.fft([1, 3])
+test_analyzer.plot_fft([1, 3], N_max=100)
+test_analyzer.time_series([1, 3], limits=True)
+test_analyzer.phase_portrait(1, 3, analytical=True) 
+
+plt.show()
