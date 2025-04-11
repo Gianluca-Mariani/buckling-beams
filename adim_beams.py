@@ -143,6 +143,30 @@ class AdimBeamSystemArray:
 
 
     def solve_ffts(self, i_array, plot_bool=False, N_max=100):
+        """
+        Computes the FFT for all combinations of parameters
+        """
+        # Create a list of parameter combinations
+        # Flatten combinations into a list
+        params = list(product(range(self.lengths[0]), range(self.lengths[1]), range(self.lengths[2])))
+
+        # You can vmap or parallelize over these
+        @jax.vmap
+        def solve_wrapper(idx):
+            i, j, k = idx
+            return fft_sol_from_grid(self.ys[i, j, k], self.ts[i, j, k], i_array)
+        
+        # Unpack the results
+        xf, ff, df, da = solve_wrapper(jnp.array(params))
+        
+        # Reshape ts and ys first dimension into 3D arrays
+        self.xf = jnp.reshape(xf, tuple(self.lengths) + (xf.shape[-1],))
+        self.fft_results = jnp.reshape(ff, tuple(self.lengths) + (ff.shape[-2], ff.shape[-1]))
+        self.dominant_frequencies = jnp.reshape(df, tuple(self.lengths) + (df.shape[-1],))
+        self.dominant_amplitudes = jnp.reshape(da, tuple(self.lengths) + (da.shape[-1],))
+
+
+    def solve_ffts_old(self, i_array, plot_bool=False, N_max=100):
         for i in range(self.lengths[0]):
             for j in range(self.lengths[1]):
                 for k in range(self.lengths[2]):
@@ -262,11 +286,12 @@ y0 = jnp.tile(y0b, n)
 
 start_time = time.time()
 
-omegas = jnp.geomspace(0.1, 10, 2)
+omegas = jnp.geomspace(0.1, 10, 20)
 r0s = jnp.linspace(0.1, 0.9, 3)
 r1s = jnp.linspace(0.1, 0.9, 4)
 test_array = AdimBeamSystemArray(omegas, r0s, r1s)
 test_array.solve(y0)
+test_array.solve_ffts([1, 3], plot_bool=False, N_max=100)
 
 end_time = time.time()
 print(end_time - start_time)

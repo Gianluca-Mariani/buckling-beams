@@ -16,13 +16,12 @@ def fft_single_component(state_values, ts, i):
     amp = 2.0 / N * jnp.abs(yf[jnp.argmax(jnp.abs(yf[:N // 2]))])
     return yf, freq, amp
 
-def fft_sol_from_grid(sol, i_array):
+def fft_sol_from_grid(ys, ts, i_array):
     """
     Computes FFT in parallel across selected state components.
     Supports both single and multiple indices.
     """
-    ts = sol.ts
-    ys = sol.ys
+
     i_array = jnp.atleast_1d(jnp.array(i_array))
 
     # Make sure ys is 2D
