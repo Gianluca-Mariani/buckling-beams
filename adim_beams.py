@@ -158,20 +158,25 @@ class AdimBeamSystemArray:
         
         # Unpack the results
         xf, ff, df, da = solve_wrapper(jnp.array(params))
-        
+
         # Reshape ts and ys first dimension into 3D arrays
         self.xf = jnp.reshape(xf, tuple(self.lengths) + (xf.shape[-1],))
         self.fft_results = jnp.reshape(ff, tuple(self.lengths) + (ff.shape[-2], ff.shape[-1]))
         self.dominant_frequencies = jnp.reshape(df, tuple(self.lengths) + (df.shape[-1],))
         self.dominant_amplitudes = jnp.reshape(da, tuple(self.lengths) + (da.shape[-1],))
 
+        if plot_bool:
+            for i in range(self.lengths[0]):
+                for j in range(self.lengths[1]):
+                    for k in range(self.lengths[2]):
+                        system = BeamAnalyzer(self.ys[i, j, k], self.omegas[i, j, k], self.r0s[i, j, k], self.r1s[i, j, k])
+                        system.xf = self.xf[i, j, k]
+                        system.fft_results = self.fft_results[i, j, k]
+                        system.dominant_frequencies = self.dominant_frequencies[i, j, k]
+                        system.dominant_amplitudes = self.dominant_amplitudes[i, j, k]
+                        system.plot_fft(i_array, N_max=N_max)
 
-    def solve_ffts_old(self, i_array, plot_bool=False, N_max=100):
-        for i in range(self.lengths[0]):
-            for j in range(self.lengths[1]):
-                for k in range(self.lengths[2]):
-                    self.beams_param[i][j][k].fft_sol(i_array, plot_bool=plot_bool, N_max=N_max) 
-    
+
     def time_plots(self, i_array, limits=False):
         for i in range(self.lengths[0]):
             for j in range(self.lengths[1]):
@@ -286,12 +291,13 @@ y0 = jnp.tile(y0b, n)
 
 start_time = time.time()
 
-omegas = jnp.geomspace(0.1, 10, 20)
+omegas = jnp.geomspace(0.1, 10, 2)
 r0s = jnp.linspace(0.1, 0.9, 3)
 r1s = jnp.linspace(0.1, 0.9, 4)
 test_array = AdimBeamSystemArray(omegas, r0s, r1s)
 test_array.solve(y0)
-test_array.solve_ffts([1, 3], plot_bool=False, N_max=100)
+test_array.solve_ffts([1, 3], plot_bool=True, N_max=100)
 
 end_time = time.time()
 print(end_time - start_time)
+plt.show()

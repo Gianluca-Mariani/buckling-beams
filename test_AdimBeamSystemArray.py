@@ -24,7 +24,7 @@ def test_solve():
     r1s = jnp.array([0.3, 0.4, 0.5, 0.6])
     system = AdimBeamSystemArray(omegas=omegas, r0s=r0s, r1s=r1s)
     
-    y0 = jnp.array([0.1, 0.2, 0.3])
+    y0 = jnp.array([0.1, 0.2, 0.3, 0.4])
     t_cycles = 6
     N_fact = 1000
     system.solve(y0=y0, t_cycles=t_cycles, N_fact=N_fact)
@@ -33,3 +33,25 @@ def test_solve():
     assert hasattr(system, 'ys'), "System should have 'ys' attribute after solving"
     assert system.ts.shape == tuple(system.lengths) + (N_fact, ), "Time array should match expected length"
     assert system.ys.shape == tuple(system.lengths) + (N_fact, len(y0)), "Solution array should match expected shape"
+
+def test_solve_ffts():
+    omegas = jnp.array([1.0, 2.0])
+    r0s = jnp.array([0.5, 0.6, 0.7])
+    r1s = jnp.array([0.3, 0.4, 0.5, 0.6])
+    system = AdimBeamSystemArray(omegas=omegas, r0s=r0s, r1s=r1s)
+    
+    y0 = jnp.array([0.1, 0.2, 0.3, 0.4])
+    t_cycles = 8
+    N_fact = 3000
+    system.solve(y0=y0, t_cycles=t_cycles, N_fact=N_fact)
+    
+    system.solve_ffts([0, 1, 2, 3], plot_bool=False, N_max=100)
+    
+    assert hasattr(system, 'xf'), "System should have 'xf' attribute after solving FFT"
+    assert hasattr(system, 'fft_results'), "System should have 'yf' attribute after solving FFT"
+    assert hasattr(system, 'dominant_frequencies'), "System should have 'freqs' attribute after solving FFT"
+    assert hasattr(system, 'dominant_amplitudes'), "System should have 'amps' attribute after solving FFT"
+    assert system.xf.shape == tuple(system.lengths) + (N_fact // 2, ), "Frequency array should match expected length"
+    assert system.fft_results.shape == tuple(system.lengths) + (len(y0), N_fact), "FFT results should match expected shape"
+    assert system.dominant_frequencies.shape == tuple(system.lengths) + (len(y0), ), "Dominant frequencies should match expected shape"
+    assert system.dominant_amplitudes.shape == tuple(system.lengths) + (len(y0), ), "Dominant frequencies should match expected shape"
