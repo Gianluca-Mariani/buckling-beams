@@ -121,7 +121,7 @@ class AdimBeamSystemArray:
         self.r1s = jnp.kron(jnp.kron(jnp.ones(self.lengths[0])[:, None, None], jnp.ones(self.lengths[1])[None, :, None]), r1s[None, None, :])        # 3d array of coupling vs local stiffness ratios
 
     
-    def solve(self, y0):
+    def solve(self, y0, t_cycles=5, N_fact=2000):
         """
         Solves the system of equations for all combinations of parameters
         y0: initial conditions
@@ -134,18 +134,13 @@ class AdimBeamSystemArray:
         @jax.vmap
         def solve_wrapper(idx):
             i, j, k = idx
-            return self.beams_param[i][j][k].solve(y0, self.omegas[i, j, k], self.r0s[i, j, k], self.r1s[i, j, k])
+            return solve_system(y0, self.omegas[i, j, k], self.r0s[i, j, k], self.r1s[i, j, k], t_cycles=t_cycles, N_fact=N_fact)
         # Unpack the results
         results = solve_wrapper(jnp.array(params))
+        # Reshape ts and ys first dimension into 3D arrays
+        self.ts = jnp.reshape(results.ts, tuple(self.lengths) + (results.ts.shape[-1],))  # Reshape ts to a 3D array of shape (len(omegas), len(r0s), len(r1s))
+        self.ys = jnp.reshape(results.ys, tuple(self.lengths) + (results.ys.shape[-2], results.ys.shape[-1]))  # Reshape ts to a 3D array of shape (len(omegas), len(r0s), len(r1s))
 
-
-
-
-    def solve_objects(self, y0):
-        for i in range(self.lengths[0]):
-            for j in range(self.lengths[1]):
-                for k in range(self.lengths[2]):
-                    self.beams_param[i][j][k].solve_lagrangian_system(y0)
 
     def solve_ffts(self, i_array, plot_bool=False, N_max=100):
         for i in range(self.lengths[0]):
@@ -255,7 +250,7 @@ test_analyzer.plot_fft([1, 3], N_max=100)
 test_analyzer.time_series([1, 3], limits=True)
 test_analyzer.phase_portrait(1, 3, analytical=True) 
 
-plt.show()
+plt.show()"""
 
 n=1
 y00 = jnp.array([0])
@@ -265,8 +260,13 @@ y03 = jnp.array([1])
 y0b = jnp.concatenate([y00, y01, y02, y03])
 y0 = jnp.tile(y0b, n)
 
-omegas = jnp.array([1.0, 2.0, 3.0])
-r0s = jnp.array([0.5, 0.6])
-r1s = jnp.array([0.3, 0.4])
+start_time = time.time()
+
+omegas = jnp.geomspace(0.1, 10, 2)
+r0s = jnp.linspace(0.1, 0.9, 3)
+r1s = jnp.linspace(0.1, 0.9, 4)
 test_array = AdimBeamSystemArray(omegas, r0s, r1s)
-test_array.solve(y0)"""
+test_array.solve(y0)
+
+end_time = time.time()
+print(end_time - start_time)
