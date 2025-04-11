@@ -42,15 +42,16 @@ def solve_system(y0, omega, r0, r1, t_cycles=5, N_fact=2000):
 
 # BeamAnalyzer class: encapsulates the analysis and plotting
 class BeamAnalyzer:
-    def __init__(self, sol, omega, r0, r1):
-        self.sol = sol
+    def __init__(self, sol_t, sol_y, omega, r0, r1):
+        self.sol_t = sol_t
+        self.sol_y = sol_y
         self.omega = omega
         self.r0 = r0
         self.r1 = r1
 
 
     def fft(self, i_array):
-        xf, fft_results, freqs, amps = fft_sol_from_grid(self.sol, i_array)
+        xf, fft_results, freqs, amps = fft_sol_from_grid(self.sol_y, self.sol_t, i_array)
         self.xf = xf
         self.fft_results = fft_results
         self.dominant_frequencies = freqs
@@ -72,10 +73,9 @@ class BeamAnalyzer:
 
 
     def time_series(self, i_array, limits=True):
-        ts, ys = self.sol.ts, self.sol.ys
         for i in i_array:
             fig, ax = plt.subplots() 
-            ax.plot(ts, ys[:, i], label="Numerical path")
+            ax.plot(self.sol_t, self.sol_y[:, i], label="Numerical path")
             if limits:
                 ax.axhline(y=jnp.sqrt(1 + self.r0), color='r', linestyle='--')
                 ax.axhline(y=jnp.sqrt(1 - self.r0), color='r', linestyle='--')
@@ -88,16 +88,14 @@ class BeamAnalyzer:
     def phase_portrait(self, i1, i2, analytical=True):
         """Plots phase portraits for solutions"""
         fig, ax = plt.subplots() 
-        state_values = self.sol.ys
-        time_values = self.sol.ts
         an_sol = jnp.array([
-            jnp.zeros(len(time_values)),
-            jnp.sqrt(1+self.r0*jnp.sin(self.omega*time_values)),
-            jnp.zeros(len(time_values)),
-            jnp.sqrt(1-self.r0*jnp.sin(self.omega*time_values))
+            jnp.zeros(len(self.sol_t)),
+            jnp.sqrt(1+self.r0*jnp.sin(self.omega*self.sol_t)),
+            jnp.zeros(len(self.sol_t)),
+            jnp.sqrt(1-self.r0*jnp.sin(self.omega*self.sol_t))
         ])
         ax.plot(an_sol[i1], an_sol[i2], color='r', linestyle='--', label=r"Analytical equilibrium path")
-        ax.plot(state_values[:,i1], state_values[:,i2], label="Numerical path")
+        ax.plot(self.sol_y[:, i1], self.sol_y[:, i2], label="Numerical path")
         
         ax.set_xlabel(f"$x_{i1}$")
         ax.set_ylabel(f"$x_{i2}$")
@@ -169,7 +167,7 @@ class AdimBeamSystemArray:
             for i in range(self.lengths[0]):
                 for j in range(self.lengths[1]):
                     for k in range(self.lengths[2]):
-                        system = BeamAnalyzer(self.ys[i, j, k], self.omegas[i, j, k], self.r0s[i, j, k], self.r1s[i, j, k])
+                        system = BeamAnalyzer(self.ts[i, j, k], self.ys[i, j, k], self.omegas[i, j, k], self.r0s[i, j, k], self.r1s[i, j, k])
                         system.xf = self.xf[i, j, k]
                         system.fft_results = self.fft_results[i, j, k]
                         system.dominant_frequencies = self.dominant_frequencies[i, j, k]
@@ -181,9 +179,17 @@ class AdimBeamSystemArray:
         for i in range(self.lengths[0]):
             for j in range(self.lengths[1]):
                 for k in range(self.lengths[2]):
-                    self.beams_param[i][j][k].time_series_plot(i_array=i_array, limits=limits)
+                    system = BeamAnalyzer(self.ts[i, j, k], self.ys[i, j, k], self.omegas[i, j, k], self.r0s[i, j, k], self.r1s[i, j, k])
+                    system.time_series(i_array=i_array, limits=limits)
 
     def phase_plots(self, i1, i2, analytical = False):
+        for i in range(self.lengths[0]):
+            for j in range(self.lengths[1]):
+                for k in range(self.lengths[2]):
+                    system = BeamAnalyzer(self.ts[i, j, k], self.ys[i, j, k], self.omegas[i, j, k], self.r0s[i, j, k], self.r1s[i, j, k])
+                    system.phase_portrait(i1=i1, i2=i2, analytical=analytical)
+
+    def phase_plots_old(self, i1, i2, analytical = False):
         for i in range(self.lengths[0]):
             for j in range(self.lengths[1]):
                 for k in range(self.lengths[2]):
@@ -296,7 +302,8 @@ r0s = jnp.linspace(0.1, 0.9, 3)
 r1s = jnp.linspace(0.1, 0.9, 4)
 test_array = AdimBeamSystemArray(omegas, r0s, r1s)
 test_array.solve(y0)
-test_array.solve_ffts([1, 3], plot_bool=True, N_max=100)
+test_array.solve_ffts([1, 3], plot_bool=False, N_max=100)
+
 
 end_time = time.time()
 print(end_time - start_time)
