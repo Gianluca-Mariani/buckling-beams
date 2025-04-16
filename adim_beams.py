@@ -238,9 +238,6 @@ class AdimBeamSystemArray:
                 function_to_run(q1, q2, t_avg, y_avg[:, :, :, y], freq_avg[:, :, y_arr.index(y)], ampl_avg[:, :, y_arr.index(y)], [self.omegas[:, 0, 0], self.r0s[0, :, 0], self.r1s[0, 0, :]], y)
 
 
-#/(jnp.sqrt(1+params[q2][i])-jnp.sqrt(1-params[q2][i]))*2
-#/A_{{eq}}
-
 def A_vs_Omega(q1, q2, t_avg, y_avg, freq_avg, ampl_avg, params, y_curr):
     fig, ax = plt.subplots() 
     if q2 == None:
@@ -260,7 +257,7 @@ def A_vs_Omega(q1, q2, t_avg, y_avg, freq_avg, ampl_avg, params, y_curr):
         ax.set_xlabel(r"$r_0$")
     elif q1 == 2:
         ax.set_xlabel(r"$r_1$")
-    ax.set_ylabel(fr"$A_{{{y_curr}}}$")
+    ax.set_ylabel(fr"$A_{{{y_curr}}}/A_{{eq}}$")
     ax.legend(loc='upper right')
     ax.grid(True)
     ax.set_xscale('log')
@@ -283,7 +280,7 @@ test_analyzer.plot_fft([1, 3], N_max=100)
 test_analyzer.time_series([1, 3], limits=True)
 test_analyzer.phase_portrait(1, 3, analytical=True) 
 
-plt.show()"""
+plt.show()
 
 n=1
 y00 = jnp.array([0])
@@ -296,7 +293,7 @@ y0 = jnp.tile(y0b, n)
 start_time = time.time()
 
 omegas = jnp.geomspace(0.1, 10, 100)
-r0s = jnp.linspace(0.1, 0.9, 10)
+r0s = jnp.linspace(0.1, 1, 10) 
 r1s = jnp.linspace(0, 0, 1)
 test_array = AdimBeamSystemArray(omegas, r0s, r1s)
 test_array.solve(y0)
@@ -305,4 +302,4 @@ test_array.vary_param(A_vs_Omega, [1, 3], "omega", "r0")
 
 end_time = time.time()
 print(end_time - start_time)
-plt.show()
+plt.show()"""
