@@ -9,13 +9,13 @@ def test_fft_sol_known_signal_single():
     sol = SimpleNamespace(ts=t, ys=y)
 
     xf, yf, freqs, amps = fft_sol_from_grid(y, t, i_array=[0])
-    assert freqs.shape == (1, ), f"Expected one frequency, got shape {freqs.shape}"
+    assert freqs.shape == (1,), f"Expected one frequency, got shape {freqs.shape}"
     assert jnp.isclose(freqs, 5.0, atol=0.5), f"Expected ~5 Hz, got {freqs}"
 
 
 def test_fft_sol_known_signal_multiple():
     t = jnp.linspace(0, 1, 1000)
-    y1 = jnp.sin(2 * jnp.pi * 5 * t)   # 5 Hz
+    y1 = jnp.sin(2 * jnp.pi * 5 * t)  # 5 Hz
     y2 = jnp.sin(2 * jnp.pi * 10 * t)  # 10 Hz
     ys = jnp.stack([y1, y2], axis=-1)
     sol = SimpleNamespace(ts=t, ys=ys)
