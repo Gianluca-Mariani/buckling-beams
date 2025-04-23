@@ -52,8 +52,11 @@ function find_equilibria(n, t_val, ω_val, r0_val, r1_val)
     # 6. Solve using HomotopyContinuation
     result = solve(grad_polys_flat)
 
-    real_sols = real_solutions(result)  # returns only real-valued solutions
-    x_sols = [Float64[x[i] for i in 1:n] for x in real_sols]  # convert to plain vectors
+    tol = 1e-5  # tolerance for "almost real"
+    sols = solutions(result)
+    real_sols = [sol for sol in sols if all(x -> abs(imag(x)) < tol, sol)]  # accept near-real
+    x_sols = [Float64[real(x[i]) for i in 1:n] for x in real_sols]
+
 
     # 7. Filter out unstable solutions
     stability_info = ThreadsX.map(x_sol -> (x_sol, is_minimum(x_sol, H_eval, q)), x_sols)
@@ -63,13 +66,13 @@ function find_equilibria(n, t_val, ω_val, r0_val, r1_val)
 end
 
 
-times = 0:0.1:10  # Example time points
+times = 0:1:10  # Example time points
 
 function find_stable_points(t)
     r0_val = 0.5
     r1_val = 0.0
     ω_val = 2.0
-    n = 4
+    n = 2
     return find_equilibria(n, t, ω_val, r0_val, r1_val)
 end
 
@@ -77,16 +80,14 @@ end
 # Preallocate the array for stable solutions
 stable_solutions = Vector{Vector{Vector{Float64}}}(undef, length(times))
 
-
-@threads for i in eachindex(times)
+for i in eachindex(times)
     t = times[i]
     stable_solutions[i] = find_stable_points(t)
 end
 
 
 for i in eachindex(stable_solutions)
-    @show i
-    println("Stable solutions at time $i: ", length(stable_solutions[i]))   
+    println("Length of stable solutions at time $i: ", length(stable_solutions[i]))   
 end
 
 function build_paths(stable_solutions)
