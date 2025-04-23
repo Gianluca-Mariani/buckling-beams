@@ -2,6 +2,9 @@
 
 using Symbolics, DynamicPolynomials, HomotopyContinuation, LinearAlgebra, ThreadsX
 
+using Base.Threads: @threads
+using SharedArrays  # or just a regular array if memory is not an issue
+
 function is_minimum(x_sol::Vector{Float64}, H_evaluated::Matrix{Num}, q::AbstractVector{<:Num})
     q_vals = Dict(q[i] => x_sol[i] for i in eachindex(q))
     H_num = Symbolics.substitute.(H_evaluated, Ref(q_vals))
@@ -59,5 +62,65 @@ function find_equilibria(n, t_val, ω_val, r0_val, r1_val)
     return stable_solutions
 end
 
-# Example call
-Stable_solutions = find_equilibria(2, 0.0, 2.0, 1, 0.0)
+
+times = 0:0.1:10  # Example time points
+
+function find_stable_points(t)
+    r0_val = 0.5
+    r1_val = 0.0
+    ω_val = 2.0
+    n = 4
+    return find_equilibria(n, t, ω_val, r0_val, r1_val)
+end
+
+
+# Preallocate the array for stable solutions
+stable_solutions = Vector{Vector{Vector{Float64}}}(undef, length(times))
+
+
+@threads for i in eachindex(times)
+    t = times[i]
+    stable_solutions[i] = find_stable_points(t)
+end
+
+
+for i in eachindex(stable_solutions)
+    @show i
+    println("Stable solutions at time $i: ", length(stable_solutions[i]))   
+end
+
+function build_paths(stable_solutions)
+    n_timepoints = length(stable_solutions)
+    n_paths = length(stable_solutions[1])  # assume constant number for now
+
+    paths = [Vector{Vector{Float64}}(undef, n_timepoints) for _ in 1:n_paths]
+
+    # Initialize paths with first timepoint
+    for j in 1:n_paths
+        paths[j][1] = stable_solutions[1][j]
+    end
+
+    # For each following timepoint, assign each solution to closest from previous step
+    for i in 2:n_timepoints
+        prev_sols = paths .|> x -> x[i - 1]
+        curr_sols = copy(stable_solutions[i])
+        used = falses(length(curr_sols))
+
+        for j in 1:n_paths
+            prev = prev_sols[j]
+            # Find closest unused solution
+            dists = [norm(sol - prev) for sol in curr_sols]
+            for k in sortperm(dists)
+                if !used[k]
+                    paths[j][i] = curr_sols[k]
+                    used[k] = true
+                    break
+                end
+            end
+        end
+    end
+
+    return paths
+end
+
+sorted_paths = build_paths(stable_solutions)
