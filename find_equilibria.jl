@@ -1,17 +1,30 @@
-using Symbolics, DynamicPolynomials, HomotopyContinuation, LinearAlgebra, ThreadsX
-using Base.Threads: @threads
-using HomotopyContinuation.ModelKit
+using Symbolics, DynamicPolynomials, HomotopyContinuation, LinearAlgebra
+
+"""
+Data types used:
+
+Vector{Float64}: 1D array of Float64, short for Array{Float64, 1}, included in base Julia
+Num: a symbolic number, a polynomial, or an abstract number, included in the DynamicPolynomials package
+Matrix{Num}: 2D array of Num, short for Array{Num, 2}
+AbstractVector{<:Num}: a vector of Num or one of its subtypes (<: denotes subtypes), short for Array{Num, N} where N is an integer
+AbstractVector: a Julia abstract type for vectors, which can be of any subtype
+"""
+
 
 # Check if a solution is a minimum based on the Hessian matrix
 function is_minimum(x_sol::Vector{Float64}, H_evaluated::Matrix{Num}, q::AbstractVector{<:Num})
-    q_vals = Dict(q[i] => x_sol[i] for i in eachindex(q))
+    """
+    Vector{Float64}, Matrix{Num}, Vector{<:Num} -> Boolean
+    Returns true if the Hessian matrix is positive definite at the given solution, false otherwise (also for errors).
+    """
+    q_vals = Dict(q[i] => x_sol[i] for i in eachindex(q)) # Create a dictionary for linking q variables to the numerical values of the solution
     H_num = Symbolics.substitute.(H_evaluated, Ref(q_vals))
 
     try
         d = diag(H_num)
         e = diag(H_num, 1)
         H_mat = SymTridiagonal(d, e)
-        return isposdef(H_mat)
+        return isposdef(H_mat) # return true if the Hessian is positive definite
     catch
         return false
     end
@@ -98,4 +111,4 @@ r1_val = 0.0
 ω_val = 2.0
 times = 0:1:10
 
-stable_solutions = find_equilibria_series(n, times, ω_val, r0_val, r1_val)
+#stable_solutions = find_equilibria_series(n, times, ω_val, r0_val, r1_val)
