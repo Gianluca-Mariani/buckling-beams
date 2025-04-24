@@ -31,7 +31,10 @@ function is_minimum(x_sol::Vector{Float64}, H_evaluated::Matrix{Num}, q::Abstrac
 end
 
 # Define symbolic potential with DynamicPolynomials variables
-function symbolic_potential(n)
+function symbolic_potential(n::Int)
+    """
+    Integer -> Tuple{Vector{Num}, Matrix{Num}, Vector{Num}, Num, Num, Num, Num}
+    """
     @variables t r₀ r₁ ω
     @variables q[1:n]
     q = collect(q)

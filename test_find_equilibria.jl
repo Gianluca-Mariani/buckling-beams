@@ -35,5 +35,23 @@ function test_is_minimum()
     end
 end
 
+
+# Define tests for the symbolic_potential function
+function test_symbolic_potential()
+    n = 3
+    grad, H, q, t, r₀, r₁, ω = symbolic_potential(n)
+
+    # Check the returned types
+    @test typeof(grad) == Vector{Num}
+    @test typeof(H) == Matrix{Num}
+    @test typeof(q) == Vector{Num}
+    @test typeof(t) == Num
+    @test typeof(r₀) == Num
+    @test typeof(r₁) == Num
+    @test typeof(ω) == Num
+
+end
+
 # Run all tests
 test_is_minimum()
+test_symbolic_potential()
