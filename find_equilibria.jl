@@ -77,22 +77,28 @@ function evaluate_hessian(H::Matrix{Num}, q::Vector{Num}, t_sym::Num, r0_sym::Nu
 end
 
 # Main solver using parameter homotopy
-function find_equilibria_series(n, times, ω_val, r0_val, r1_val)
-    grad, H, q, t_sym, r0_sym, r1_sym, ω_sym = symbolic_potential(n)
+function find_equilibria_series(n::Int, times, ω_val::Float64, r0_val::Float64, r1_val::Float64)
+    # Initialize variables
     stable_solutions = Vector{Vector{Vector{Float64}}}(undef, length(times))
+    grad, H, q, r0_sym, r1_sym, a_sym = symbolic_potential(n)
+
+    # Make substitutions that need to be done only once
+    grad_0 = subs(grad, r0_sym => r0_val, r1_sym => r1_val)
+    H_0 = subs(H, r0_sym => r0_val, r1_sym => r1_val)
 
     println("Initial step")
-    grad_polys, x_vars, param_vars = compute_gradient_polynomials(grad, q, r0_sym, r1_sym, ω_sym, t_sym)
 
     # Initial solve
-    F = symbolic_system(grad_polys, x_vars, parameters=param_vars)
-    param_start = [r0_val, r1_val, ω_val, times[1]]
-    result = solve(F; target_parameters=param_start)
+    grad_solve = subs(grad_0, a_sym => sin(ω_val * times[1]))
+    result = solve(grad_solve)
+
 
     tol = 1e-5
     sols = solutions(result)
+    
     real_sols = [sol for sol in sols if all(x -> abs(imag(x)) < tol, sol)]
     x_sols = [Float64[real(x[j]) for j in 1:n] for x in real_sols]
+    @show x_sols
 
     H_eval = evaluate_hessian(H, q, t_sym, r0_sym, r1_sym, ω_sym, times[1], r0_val, r1_val, ω_val)
     info = ThreadsX.map(x_sol -> (x_sol, is_minimum(x_sol, H_eval, q)), x_sols)
@@ -131,4 +137,4 @@ r1_val = 0.0
 ω_val = 2.0
 times = 0:1:10
 
-#stable_solutions = find_equilibria_series(n, times, ω_val, r0_val, r1_val)
+stable_solutions = find_equilibria_series(n, times, ω_val, r0_val, r1_val)
