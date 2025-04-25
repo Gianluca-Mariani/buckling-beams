@@ -1,4 +1,4 @@
-using Symbolics, DynamicPolynomials, HomotopyContinuation, LinearAlgebra
+using DynamicPolynomials, HomotopyContinuation, LinearAlgebra
 
 """
 Data types used:
@@ -30,39 +30,50 @@ function is_minimum(x_sol::Vector{Float64}, H_evaluated::Matrix{Num}, q::Abstrac
     end
 end
 
+
 # Define symbolic potential with DynamicPolynomials variables
 function symbolic_potential(n::Int)
     """
-    Integer -> Tuple{Vector{Num}, Matrix{Num}, Vector{Num}, Num, Num, Num, Num}
+    Integer -> AbstractVector, AbstractMatrix, AbstractVector, DynamicPolynomials.Variable, DynamicPolynomials.Variable, DynamicPolynomials.Variable, DynamicPolynomials.Variable
+    Returns the gradient, Hessian, and symbolic variables for the potential function given the input length of chain n.
     """
-    @variables t r₀ r₁ ω
-    @variables q[1:n]
-    q = collect(q)
+    @polyvar r₀ r₁ a
+    @polyvar q[1:n]
 
-    phi = i -> (i % 4 == 0) || (i % 4 == 3) ? 0.0 : π
-    V = sum(0.5 * ((-1)^(i-1) + r₀ * sin(ω * t + phi(i-1))) * q[i]^2 + 0.25 * q[i]^4 for i in 1:n)
+    phi = i -> (i % 4 == 0) || (i % 4 == 3) ? 1.0 : -1.0
+    V = sum(0.5 * ((-1)^(i-1) + r₀ * phi(i-1) * a) * q[i]^2 + 0.25 * q[i]^4 for i in 1:n)
     V += sum(0.5 * r₁ * (q[i+1] - q[i])^2 for i in 1:n-1)
     V += 0.5 * r₁ * (q[1] - q[n])^2
 
-    grad = Symbolics.gradient(V, q)
-    H = Symbolics.hessian(V, q)
-    return grad, H, q, t, r₀, r₁, ω
+    grad = differentiate(V, q)
+    H = differentiate(grad, q)
+    return grad, H, q, r₀, r₁, a
 end
 
-# Function to substitute values correctly for DynamicPolynomials
-function compute_gradient_polynomials(grad, q, t_sym, r0_sym, r1_sym, ω_sym, r0_val, r1_val, ω_val, t_val)
+function compute_gradient_polynomials(grad::Vector{Num}, q::Vector{Num}, r0_sym::Num, r1_sym::Num, ω_sym::Num, t_sym::Num)
+    # Define symbolic variables (Symbolics.jl style)
+    @variables x[1:length(q)] r0 r1 ω t
+
+    # Substitutions
+    q_subs = Dict(q[i] => x[i] for i in eachindex(q))
+    param_subs = Dict(r0_sym => r0, r1_sym => r1, ω_sym => ω, t_sym => t)
+
+    grad_subs = Symbolics.substitute.(grad, Ref(param_subs))
+    grad_polys = Symbolics.substitute.(grad_subs, Ref(q_subs))
+
+    return grad_polys, x, [r0, r1, ω, t]
+end
+
+# Function to substitute values correctly for DynamicPolynomials for Hessian
+function evaluate_hessian(H::Matrix{Num}, q::Vector{Num}, t_sym::Num, r0_sym::Num, r1_sym::Num, ω_sym::Num, t_val, r0_val, r1_val, ω_val)
     # Create DynamicPolynomials variables
     @polyvar x[1:length(q)] t
 
     # Construct substitution dictionary for parameters
-    param_subs = Dict(r0_sym => r0_val, r1_sym => r1_val, ω_sym => ω_val, t_sym => t_val)
-    grad_subs = Symbolics.substitute.(grad, Ref(param_subs))
+    param_subs = Dict(t_sym => t_val, r0_sym => r0_val, r1_sym => r1_val, ω_sym => ω_val)
+    H1 = Symbolics.substitute.(H, Ref(param_subs))
 
-    # Map q variables to DynamicPolynomials
-    q_subs = Dict(q[i] => x[i] for i in eachindex(q))
-    grad_polys = Symbolics.substitute.(grad_subs, Ref(q_subs))
-
-    return grad_polys, x
+    return H1, x
 end
 
 # Main solver using parameter homotopy
@@ -71,33 +82,39 @@ function find_equilibria_series(n, times, ω_val, r0_val, r1_val)
     stable_solutions = Vector{Vector{Vector{Float64}}}(undef, length(times))
 
     println("Initial step")
-    grad_polys, x_vars = compute_gradient_polynomials(grad, q, t_sym, r0_sym, r1_sym, ω_sym, r0_val, r1_val, ω_val, times[1])
-    
-    # Ensure symbolic variables are properly passed to HomotopyContinuation
-    F = System(grad_polys, variables=x_vars, parameters=[t_sym])
-    result = solve(F; start_parameters=[times[1]], target_parameters=[times[1]])
+    grad_polys, x_vars, param_vars = compute_gradient_polynomials(grad, q, r0_sym, r1_sym, ω_sym, t_sym)
+
+    # Initial solve
+    F = symbolic_system(grad_polys, x_vars, parameters=param_vars)
+    param_start = [r0_val, r1_val, ω_val, times[1]]
+    result = solve(F; target_parameters=param_start)
 
     tol = 1e-5
     sols = solutions(result)
     real_sols = [sol for sol in sols if all(x -> abs(imag(x)) < tol, sol)]
     x_sols = [Float64[real(x[j]) for j in 1:n] for x in real_sols]
 
-    H_eval = compute_Hessian(H, t_sym, r0_sym, r1_sym, ω_sym, times[1], r0_val, r1_val, ω_val)
+    H_eval = evaluate_hessian(H, q, t_sym, r0_sym, r1_sym, ω_sym, times[1], r0_val, r1_val, ω_val)
     info = ThreadsX.map(x_sol -> (x_sol, is_minimum(x_sol, H_eval, q)), x_sols)
     stable_real_sols = [x for (x, is_stable) in info if is_stable]
+
     stable_solutions[1] = stable_real_sols
 
     println("Tracking parameter homotopy")
     for (i, t_val) in enumerate(times[2:end])
-        grad_polys, _ = compute_gradient_polynomials(grad, q, t_sym, r0_sym, r1_sym, ω_sym, r0_val, r1_val, ω_val, t_val)
-        F = System(grad_polys, variables=x_vars)
-        result = solve(F, start_solutions=stable_real_sols)
-        
-        sols = solutions(result)
+        grad_polys, _, param_vars = compute_gradient_polynomials(grad, q, r0_sym, r1_sym, ω_sym, t_sym)
+        F = symbolic_system(grad_polys, x_vars, parameters=param_vars)
+
+        param_start = [r0_val, r1_val, ω_val, times[i]]
+        param_target = [r0_val, r1_val, ω_val, t_val]
+
+        tracked = track(F, stable_real_sols, Dict(param_vars .=> param_start), Dict(param_vars .=> param_target))
+        sols = solutions(tracked)
+
         real_sols = [sol for sol in sols if all(x -> abs(imag(x)) < tol, sol)]
         x_sols = [Float64[real(x[j]) for j in 1:n] for x in real_sols]
 
-        H_eval = compute_Hessian(H, t_sym, r0_sym, r1_sym, ω_sym, t_val, r0_val, r1_val, ω_val)
+        H_eval = evaluate_hessian(H, q, t_sym, r0_sym, r1_sym, ω_sym, t_val, r0_val, r1_val, ω_val)
         info = ThreadsX.map(x_sol -> (x_sol, is_minimum(x_sol, H_eval, q)), x_sols)
         stable_real_sols = [x for (x, is_stable) in info if is_stable]
 

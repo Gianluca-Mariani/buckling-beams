@@ -38,17 +38,29 @@ end
 
 # Define tests for the symbolic_potential function
 function test_symbolic_potential()
-    n = 3
-    grad, H, q, t, r₀, r₁, ω = symbolic_potential(n)
+    n = 2
+    grad, H, q, r₀, r₁, a = symbolic_potential(n)
 
     # Check the returned types
-    @test typeof(grad) == Vector{Num}
-    @test typeof(H) == Matrix{Num}
-    @test typeof(q) == Vector{Num}
-    @test typeof(t) == Num
-    @test typeof(r₀) == Num
-    @test typeof(r₁) == Num
-    @test typeof(ω) == Num
+    @test grad isa AbstractVector
+    @test H isa AbstractMatrix
+    @test q isa AbstractVector
+    @test r₀ isa DynamicPolynomials.Variable
+    @test r₁ isa DynamicPolynomials.Variable
+    @test a isa DynamicPolynomials.Variable
+
+    grad_test = [(1 + r₀ * a) * q[1] + q[1]^3 + 2.0r₁ * (q[1] - q[2]), 
+                 -(1 + r₀ * a) * q[2] + q[2]^3 + 2.0r₁ * (q[2] - q[1])]
+
+    H_test = [
+    (1 + r₀ * a) + 3.0* q[1]^2 + 2.0 * r₁ -2.0 * r₁;
+    -2.0 * r₁ -(1 + r₀ * a) + 3.0 * q[2]^2 + 2.0 * r₁
+    ]
+
+            
+    @test grad == grad_test
+    @test H == H_test
+
 
 end
 
