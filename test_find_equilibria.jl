@@ -1,5 +1,5 @@
 using Test
-using Symbolics
+using DynamicPolynomials
 using LinearAlgebra
 
 include("find_equilibria.jl")
@@ -11,8 +11,8 @@ function test_is_minimum()
     x_sol = [1.0, 2.0, 3.0]
     
     # Create a Symbolic Hessian
-    @variables q1 q2 q3
-    H_symbolic = [q1 1.0 0.0; 1.0 q2 1.0; 0.0 1.0 q3]
+    @polyvar q1 q2 q3
+    H_symbolic = polynomial.([q1 1.0 0.0; 1.0 q2 1.0; 0.0 1.0 q3])
     
     # Test case 1: Hessian is positive definite
     result = is_minimum(x_sol, H_symbolic, [q1, q2, q3])
