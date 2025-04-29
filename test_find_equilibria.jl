@@ -61,9 +61,40 @@ function test_symbolic_potential()
     @test grad == grad_test
     @test H == H_test
 
+end
+
+function test_find_equilibria_series()
+    n = 2
+    times = 0:0.1:10
+    ω_val = 1.0
+    r0_val = 0.5
+    r1_val = 0.0
+
+    # Call the function
+    stable_solutions = find_equilibria_series(n, times, ω_val, r0_val, r1_val)
+    x1_over_time = [stable_solutions[t][1][2] for t in eachindex(stable_solutions)]
+    x2_over_time = [stable_solutions[t][2][2] for t in eachindex(stable_solutions)]
+    x10_over_time = [stable_solutions[t][1][1] for t in eachindex(stable_solutions)]
+    x20_over_time = [stable_solutions[t][2][1] for t in eachindex(stable_solutions)]
+    x1_analytical = sqrt.(1 .+ r0_val .* sin.(ω_val .* times))
+    x2_analytical = -sqrt.(1 .+ r0_val .* sin.(ω_val .* times))
+    x0_analytical = zeros(length(times))
+
+    # Check the output type
+    @test stable_solutions isa Vector{Vector{Vector{Float64}}}
+
+    # Check the length of the output
+    @test length(stable_solutions) == length(times)
+
+    # Check the values of the solutions
+    # This first test is guaranteed to work only with n < 4. With n = 4, there will be at least 4 solutions
+    # Since the order of the solutions cannot be predicted, we would have to check all possible combinations
+    @test (isapprox(x1_over_time, x1_analytical) && isapprox(x2_over_time, x2_analytical)) || (isapprox(x1_over_time, x2_analytical) && isapprox(x2_over_time, x1_analytical))
+    @test isapprox(x10_over_time, x0_analytical) && isapprox(x20_over_time, x0_analytical)
 
 end
 
 # Run all tests
 test_is_minimum()
 test_symbolic_potential()
+test_find_equilibria_series()

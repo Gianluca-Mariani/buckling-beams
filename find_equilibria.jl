@@ -83,16 +83,3 @@ function find_equilibria_series(n::Int, times, ω_val::Float64, r0_val::Float64,
 
     return stable_solutions
 end
-
-# === Parameters and Execution ===
-n = 2
-r0_val = 0.5
-r1_val = 0.0
-ω_val = 2.0
-times = 0:0.01:10
-
-stable_solutions = find_equilibria_series(n, times, ω_val, r0_val, r1_val)
-
-x1_over_time = [stable_solutions[t][2][1] for t in eachindex(stable_solutions)]
-using Plots
-plot(times, x1_over_time, label="x₁(t)", xlabel="Time", ylabel="x₁")
