@@ -1,4 +1,4 @@
-using DynamicPolynomials, HomotopyContinuation, LinearAlgebra
+using DynamicPolynomials, HomotopyContinuation, LinearAlgebra, ThreadsX
 
 """
 Data types used:
@@ -61,44 +61,23 @@ function find_equilibria_series(n::Int, times, ω_val::Float64, r0_val::Float64,
     # Make substitutions that need to be done only once
     grad_0 = subs(grad, r0_sym => r0_val, r1_sym => r1_val)
     H_0 = subs(H, r0_sym => r0_val, r1_sym => r1_val)
+    S = System(grad_0, variables = q, parameters = [a_sym])
 
     println("Initial step")
 
     # Initial solve
-    grad_solve = subs(grad_0, a_sym => sin(ω_val * times[1]))
+    result = solve(S; target_parameters = [sin(ω_val * times[1])])
+    real_sols = real_solutions(result)
+
     H_solve = subs(H_0, a_sym => sin(ω_val * times[1]))
-    result = solve(grad_solve)
-
-
-    tol = 1e-5
-    sols = solutions(result)
-    
-    real_sols = [sol for sol in sols if all(x -> abs(imag(x)) < tol, sol)]
-    x_sols = [[real(x[j]) for j in 1:n] for x in real_sols]
-
-    info = ThreadsX.map(x_sol -> (x_sol, is_minimum(x_sol, H_solve, q)), x_sols)
+    info = ThreadsX.map(x_sol -> (x_sol, is_minimum(x_sol, H_solve, q)), real_sols)
     stable_real_sols = [x for (x, is_stable) in info if is_stable]
-
     stable_solutions[1] = stable_real_sols
 
     println("Tracking parameter homotopy")
     for (i, t_val) in enumerate(times[2:end])
-        grad_polys, _, param_vars = compute_gradient_polynomials(grad, q, r0_sym, r1_sym, ω_sym, t_sym)
-        F = symbolic_system(grad_polys, x_vars, parameters=param_vars)
-
-        param_start = [r0_val, r1_val, ω_val, times[i]]
-        param_target = [r0_val, r1_val, ω_val, t_val]
-
-        tracked = track(F, stable_real_sols, Dict(param_vars .=> param_start), Dict(param_vars .=> param_target))
-        sols = solutions(tracked)
-
-        real_sols = [sol for sol in sols if all(x -> abs(imag(x)) < tol, sol)]
-        x_sols = [Float64[real(x[j]) for j in 1:n] for x in real_sols]
-
-        H_eval = evaluate_hessian(H, q, t_sym, r0_sym, r1_sym, ω_sym, t_val, r0_val, r1_val, ω_val)
-        info = ThreadsX.map(x_sol -> (x_sol, is_minimum(x_sol, H_eval, q)), x_sols)
-        stable_real_sols = [x for (x, is_stable) in info if is_stable]
-
+        result = solve(S, stable_solutions[i]; start_parameters = [sin(ω_val * times[i])], target_parameters = [sin(ω_val * t_val)])
+        stable_real_sols = real_solutions(result)
         stable_solutions[i+1] = stable_real_sols
     end
 
@@ -110,6 +89,10 @@ n = 2
 r0_val = 0.5
 r1_val = 0.0
 ω_val = 2.0
-times = 0:1:10
+times = 0:0.01:10
 
-#stable_solutions = find_equilibria_series(n, times, ω_val, r0_val, r1_val)
+stable_solutions = find_equilibria_series(n, times, ω_val, r0_val, r1_val)
+
+x1_over_time = [stable_solutions[t][2][1] for t in eachindex(stable_solutions)]
+using Plots
+plot(times, x1_over_time, label="x₁(t)", xlabel="Time", ylabel="x₁")
