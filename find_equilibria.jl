@@ -1,14 +1,5 @@
 using DynamicPolynomials, HomotopyContinuation, LinearAlgebra, ThreadsX
 
-"""
-Data types used:
-
-Vector{Float64}: 1D array of Float64, short for Array{Float64, 1}, included in base Julia
-Num: a symbolic number, a polynomial, or an abstract number, included in the DynamicPolynomials package
-Matrix{Num}: 2D array of Num, short for Array{Num, 2}
-AbstractVector{<:Num}: a vector of Num or one of its subtypes (<: denotes subtypes), short for Array{Num, N} where N is an integer
-AbstractVector: a Julia abstract type for vectors, which can be of any subtype
-"""
 
 # Check if a solution is a minimum based on the Hessian matrix
 function is_minimum(x_sol::Vector{Float64}, H_evaluated::Matrix{<:Polynomial}, q::AbstractVector{<:DynamicPolynomials.Variable})
@@ -65,14 +56,18 @@ function find_equilibria_series(n::Int, times, ω_val::Float64, r0_val::Float64,
 
     println("Initial step")
 
-    # Initial solve
-    result = solve(S; target_parameters = [sin(ω_val * times[1])])
-    real_sols = real_solutions(result)
+    # The first homotopy won't always find all the solutions, so we repeat it until we find all of them
+    while true
+        # Initial solve
+        result = solve(S; target_parameters = [sin(ω_val * times[1])])
+        real_sols = real_solutions(result)
 
-    H_solve = subs(H_0, a_sym => sin(ω_val * times[1]))
-    info = ThreadsX.map(x_sol -> (x_sol, is_minimum(x_sol, H_solve, q)), real_sols)
-    stable_real_sols = [x for (x, is_stable) in info if is_stable]
-    stable_solutions[1] = stable_real_sols
+        H_solve = subs(H_0, a_sym => sin(ω_val * times[1]))
+        info = ThreadsX.map(x_sol -> (x_sol, is_minimum(x_sol, H_solve, q)), real_sols)
+        stable_real_sols = [x for (x, is_stable) in info if is_stable]
+        stable_solutions[1] = stable_real_sols
+        length(stable_real_sols) === Int(2^(n / 2)) && break
+    end
 
     println("Tracking parameter homotopy")
     for (i, t_val) in enumerate(times[2:end])
@@ -82,4 +77,10 @@ function find_equilibria_series(n::Int, times, ω_val::Float64, r0_val::Float64,
     end
 
     return stable_solutions
+end
+
+
+function parallel_find_equilibria(n::Int, times, ω_matrx::Float64, r0_matrx::Float64, r1_matrx::Float64)
+
+
 end

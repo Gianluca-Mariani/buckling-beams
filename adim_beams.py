@@ -149,7 +149,7 @@ class AdimBeamSystemArray:
         self.r0s = jnp.kron(
             jnp.kron(jnp.ones(self.lengths[0])[:, None, None], r0s[None, :, None]),
             jnp.ones(self.lengths[2])[None, None, :],
-        )  # 3d array of relative comression amplitude (if r0<0 no phase transition for single beam)
+        )  # 3d array of relative comression amplitude (if r0<1 no phase transition for single beam)
         self.r1s = jnp.kron(
             jnp.kron(
                 jnp.ones(self.lengths[0])[:, None, None],
