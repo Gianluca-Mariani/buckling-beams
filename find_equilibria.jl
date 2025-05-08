@@ -9,17 +9,13 @@ function is_minimum(x_sol::Vector{Float64}, H_evaluated::Matrix{<:Polynomial}, q
     """
     #q_vals = Dict(q[i] => x_sol[i] for i in eachindex(q)) # Create a dictionary for linking q variables to the numerical values of the solution
     #H_num = map(p -> subs(p, q_vals), H_evaluated) # Apply substitution element-wise
-
     H_num = coefficient.(subs(H_evaluated, q=>x_sol), q[1]^0) # Unwrap constant polynomials
 
-    try
-        d = diag(H_num)
-        e = diag(H_num, 1)
-        H_mat = SymTridiagonal(d, e)
-        return isposdef(H_mat) # return true if the Hessian is positive definite
-    catch
-        return false
-    end
+    d = diag(H_num)
+    e = diag(H_num, 1)
+    H_mat = SymTridiagonal(d, e)  
+    return isposdef(H_mat) # return true if the Hessian is positive definite
+
 end
 
 
@@ -42,10 +38,18 @@ function symbolic_potential(n::Int)
     return grad, H, q, r₀, r₁, a
 end
 
+# Function to find real solutions for the first time point
+function find_real_starting_points(t0::Float64, ω_val::Float64, S::System)
+    result = solve(S; target_parameters = [sin(ω_val * t0)])
+    real_sols = real_solutions(result)
+    return real_sols
+end
 
 # Main solver using parameter homotopy
 function find_equilibria_series(n::Int, times, ω_val::Float64, r0_val::Float64, r1_val::Float64)
     # Initialize variables
+    all_solutions = Vector{Vector{Vector{ComplexF64}}}(undef, length(times))
+    all_real_solutions = Vector{Vector{Vector{Float64}}}(undef, length(times))
     stable_solutions = Vector{Vector{Vector{Float64}}}(undef, length(times))
     grad, H, q, r0_sym, r1_sym, a_sym = symbolic_potential(n)
 
@@ -56,31 +60,160 @@ function find_equilibria_series(n::Int, times, ω_val::Float64, r0_val::Float64,
 
     println("Initial step")
 
-    # The first homotopy won't always find all the solutions, so we repeat it until we find all of them
-    while true
-        # Initial solve
-        result = solve(S; target_parameters = [sin(ω_val * times[1])])
-        real_sols = real_solutions(result)
 
-        H_solve = subs(H_0, a_sym => sin(ω_val * times[1]))
-        info = ThreadsX.map(x_sol -> (x_sol, is_minimum(x_sol, H_solve, q)), real_sols)
-        stable_real_sols = [x for (x, is_stable) in info if is_stable]
-        stable_solutions[1] = stable_real_sols
-        length(stable_real_sols) === Int(2^(n / 2)) && break
-    end
+    # Initial solve
+    result = solve(S; target_parameters = [sin(ω_val * times[1])])
+    sols = solutions(result)
+    real_sols = real_solutions(result)
+
+    H_solve = subs(H_0, a_sym => sin(ω_val * times[1]))
+    info = map(x_sol -> (x_sol, is_minimum(x_sol, H_solve, q)), real_sols)
+    stable_real_sols = [x for (x, is_stable) in info if is_stable]
+    all_solutions[1] = sols
+    all_real_solutions[1] = real_sols
+    stable_solutions[1] = stable_real_sols
 
     println("Tracking parameter homotopy")
     for (i, t_val) in enumerate(times[2:end])
-        result = solve(S, stable_solutions[i]; start_parameters = [sin(ω_val * times[i])], target_parameters = [sin(ω_val * t_val)])
-        stable_real_sols = real_solutions(result)
+
+        result = solve(S, all_solutions[i]; start_parameters = [sin(ω_val * times[i])], target_parameters = [sin(ω_val * t_val)])
+        all_solutions[i+1] = solutions(result)
+        all_real_solutions[i+1] = real_solutions(result)
+        H_solve = subs(H_0, a_sym => sin(ω_val * t_val))
+        info = map(x_sol -> (x_sol, is_minimum(x_sol, H_solve, q)), real_sols)
+        stable_real_sols = [x for (x, is_stable) in info if is_stable]
         stable_solutions[i+1] = stable_real_sols
+
     end
 
     return stable_solutions
 end
 
 
-function parallel_find_equilibria(n::Int, times, ω_matrx::Float64, r0_matrx::Float64, r1_matrx::Float64)
+function parallel_find_equilibria(n::Int, times, ω_matrix, r0_matrix, r1_matrix)
 
+    # Flatten parameter arrays (same order)
+    ω_vec = vec(ω_matrix)
+    r0_vec = vec(r0_matrix)
+    r1_vec = vec(r1_matrix)
+    @show ω_vec
 
+    # Form parameter list as tuples
+    param_list = [(ω, r0, r1) for (ω, r0, r1) in zip(ω_vec, r0_vec, r1_vec)]
+
+    # Map over parameter list
+    results_vec = ThreadsX.map(((ω, r0, r1),) -> find_equilibria_series(n, times, ω, r0, r1), param_list)
+
+    # Reshape back to original shape
+    results = reshape(results_vec, size(omega))
+    return results
 end
+
+
+
+#omegas = [[[1.0, 1.0], [1.0, 1.0]], [[1.0, 1.0], [1.0, 1.0]],
+#        [[2.0, 2.0], [2.0, 2.0]], [[2.0, 2.0], [2.0, 2.0]]]
+
+#r0s = [[[0.5, 0.5], [0.8, 0.8]], [[0.5, 0.5], [0.8, 0.8]],
+#        [[0.5, 0.5], [0.8, 0.8]], [[0.5, 0.5], [0.8, 0.8]]]
+
+#r1s = [[[0.2, 0.5], [0.2, 0.5]], [[0.2, 0.5], [0.2, 0.5]],
+#        [[0.2, 0.5], [0.2, 0.5]], [[0.2, 0.5], [0.2, 0.5]]]
+
+#result = parallel_find_equilibria(2, 0:0.1:10, omegas, r0s, r1s)
+
+using Plots
+ω = 2.0
+r0_val = 0.2
+r1_val = 0.5
+n = 8
+T = 2π / ω
+times = 0.0:0.1:0.5
+result = find_equilibria_series(n, times, ω, r0_val, r1_val)
+result_length = Vector{Int64}(undef, length(times))
+
+for i in eachindex(times)
+    result_length[i] = length(result[i])
+end
+
+
+plot(times, result_length, xlabel="t", ylabel="# solutions", label="Stable solutions", legend=:bottom)
+vline!([T / 4, T / 2, 3 * T / 4, T], label=nothing) 
+display(current()) 
+
+
+#for i in 1:length(result)
+#    @show i
+#    println(length(result[i]))
+#end
+
+#x1_over_time = [result[t][1][2] for t in eachindex(result)]
+#x2_over_time = [result[t][2][2] for t in eachindex(result)]
+#x3_over_time = [result[t][3][2] for t in eachindex(result)]
+#x4_over_time = [result[t][4][2] for t in eachindex(result)]
+
+
+#using Plots
+#plot(times, x1_over_time, xlabel="t", ylabel="x2", label="Solution 1")
+#plot!(times, x2_over_time, label="Solution 2")
+#plot!(times, x3_over_time, label="Solution 3")
+#plot!(times, x4_over_time, label="Solution 4")
+
+#All time points calculated indepedently
+"""
+ω = 2.0
+r0_val = 0.4
+r1_val = 0.5
+n = 8
+T = 2π / ω
+times = 0.0:0.05:T
+stable_solutions = Vector{Vector{Vector{Float64}}}(undef, length(times))
+grad, H, q, r0_sym, r1_sym, a_sym = symbolic_potential(n)
+
+# Make substitutions that need to be done only once
+grad_0 = subs(grad, r0_sym => r0_val, r1_sym => r1_val)
+H_0 = subs(H, r0_sym => r0_val, r1_sym => r1_val)
+S = System(grad_0, variables = q, parameters = [a_sym])
+real_len = Vector{Float64}(undef, length(times))
+stable_len = Vector{Float64}(undef, length(times))
+real_sols = Vector{Vector{Vector{Float64}}}(undef, length(times))
+stable_sols = Vector{Vector{Vector{Float64}}}(undef, length(times))
+
+for i in eachindex(times)
+    real_sols[i] = find_real_starting_points(times[i], ω, S)
+    real_len[i] = length(real_sols[i])
+    H_solve = subs(H_0, a_sym => sin(ω * times[i]))
+    info = map(x_sol -> (x_sol, is_minimum(x_sol, H_solve, q)), real_sols[i])
+    stable_real_sols = [x for (x, is_stable) in info if is_stable]
+    stable_sols[i] = stable_real_sols
+    stable_len[i] = length(stable_real_sols)
+end 
+
+#rounded_sols = map(x -> map(y -> round.(y; digits=2), x), stable_sols)
+#println(rounded_sols)
+
+using Plots
+
+plot(times, real_len, xlabel="t", ylabel="# solutions", label="Real solutions")
+plot!(times, stable_len, label="Stable solutions")
+vline!([T / 4, T / 2, 3 * T / 4, T], label=nothing) 
+display(current())
+
+using Plots
+using LaTeXStrings
+ω = 2.0
+r0_val = 0.0
+r1_val = LinRange(0.5, 0.6, 200)
+n = 8
+T = 2π / ω
+times = 0.0:0.05:0.0
+result_length = Vector{Int64}(undef, length(r1_val))
+for i in eachindex(r1_val)
+    result_length[i] = length(find_equilibria_series(n, times, ω, r0_val, r1_val[i])[1])
+end
+
+plot(r1_val, result_length, xlabel=L"r_1", ylabel="# solutions", label="Stable solutions", ylims=(0,18))
+
+"""
+
+

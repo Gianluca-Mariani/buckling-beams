@@ -89,9 +89,10 @@ function test_find_equilibria_series()
     # Check the values of the solutions
     # This first test is guaranteed to work only with n < 4. With n = 4, there will be at least 4 solutions
     # Since the order of the solutions cannot be predicted, we would have to check all possible combinations
-    @test (isapprox(x1_over_time, x1_analytical) && isapprox(x2_over_time, x2_analytical)) || (isapprox(x1_over_time, x2_analytical) && isapprox(x2_over_time, x1_analytical))
-    @test isapprox(x10_over_time, x0_analytical) && isapprox(x20_over_time, x0_analytical)
-
+    if n == 2
+        @test (isapprox(x1_over_time, x1_analytical) && isapprox(x2_over_time, x2_analytical)) || (isapprox(x1_over_time, x2_analytical) && isapprox(x2_over_time, x1_analytical))
+        @test isapprox(x10_over_time, x0_analytical) && isapprox(x20_over_time, x0_analytical)
+    end
 end
 
 # Run all tests
