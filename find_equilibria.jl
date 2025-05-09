@@ -7,8 +7,6 @@ function is_minimum(x_sol::Vector{Float64}, H_evaluated::Matrix{<:Polynomial}, q
     Vector{Float64}, Matrix{<:Polynomial}, Vector{<:DynamicPolynomials.Variable} -> Boolean
     Returns true if the Hessian matrix is positive definite at the given solution, false otherwise (also for errors).
     """
-    #q_vals = Dict(q[i] => x_sol[i] for i in eachindex(q)) # Create a dictionary for linking q variables to the numerical values of the solution
-    #H_num = map(p -> subs(p, q_vals), H_evaluated) # Apply substitution element-wise
     H_num = coefficient.(subs(H_evaluated, q=>x_sol), q[1]^0) # Unwrap constant polynomials
 
     d = diag(H_num)
@@ -25,8 +23,8 @@ function symbolic_potential(n::Int)
     Integer -> AbstractVector, AbstractMatrix, AbstractVector, DynamicPolynomials.Variable, DynamicPolynomials.Variable, DynamicPolynomials.Variable, DynamicPolynomials.Variable
     Returns the gradient, Hessian, and symbolic variables for the potential function given the input length of chain n.
     """
-    @polyvar r₀ r₁ a
-    @polyvar q[1:n]
+    @var r₀ r₁ a
+    @var q[1:n]
 
     phi = i -> (i % 4 == 0) || (i % 4 == 3) ? 1.0 : -1.0
     V = sum(0.5 * ((-1)^(i-1) + r₀ * phi(i-1) * a) * q[i]^2 + 0.25 * q[i]^4 for i in 1:n)
@@ -38,55 +36,36 @@ function symbolic_potential(n::Int)
     return grad, H, q, r₀, r₁, a
 end
 
-# Function to find real solutions for the first time point
-function find_real_starting_points(t0::Float64, ω_val::Float64, S::System)
-    result = solve(S; target_parameters = [sin(ω_val * t0)])
-    real_sols = real_solutions(result)
-    return real_sols
-end
 
 # Main solver using parameter homotopy
-function find_equilibria_series(n::Int, times, ω_val::Float64, r0_val::Float64, r1_val::Float64)
+function find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64)
     # Initialize variables
-    all_solutions = Vector{Vector{Vector{ComplexF64}}}(undef, length(times))
-    all_real_solutions = Vector{Vector{Vector{Float64}}}(undef, length(times))
-    stable_solutions = Vector{Vector{Vector{Float64}}}(undef, length(times))
     grad, H, q, r0_sym, r1_sym, a_sym = symbolic_potential(n)
 
     # Make substitutions that need to be done only once
     grad_0 = subs(grad, r0_sym => r0_val, r1_sym => r1_val)
     H_0 = subs(H, r0_sym => r0_val, r1_sym => r1_val)
-    S = System(grad_0, variables = q, parameters = [a_sym])
+    S = System(grad_0; variables = q, parameters = [a_sym])
 
+    # Initial solve with complex parameter
     println("Initial step")
+    start_parameter = randn(ComplexF64, 1)
+    result = solve(S; target_parameters = start_parameter)
 
+    println("Homotopy Tracking")
+    # generate some random data to simulate the parameters
+    data = [[sin(ω_val * times[i])] for i in eachindex(times)]
 
-    # Initial solve
-    result = solve(S; target_parameters = [sin(ω_val * times[1])])
-    sols = solutions(result)
-    real_sols = real_solutions(result)
+    # track p₀ towards the entries of data
+    data_points = solve(
+    S,
+    solutions(result);
+    start_parameters = start_parameter,
+    target_parameters = data,
+    transform_result = (r,p) -> real_solutions(r)
+    )
 
-    H_solve = subs(H_0, a_sym => sin(ω_val * times[1]))
-    info = map(x_sol -> (x_sol, is_minimum(x_sol, H_solve, q)), real_sols)
-    stable_real_sols = [x for (x, is_stable) in info if is_stable]
-    all_solutions[1] = sols
-    all_real_solutions[1] = real_sols
-    stable_solutions[1] = stable_real_sols
-
-    println("Tracking parameter homotopy")
-    for (i, t_val) in enumerate(times[2:end])
-
-        result = solve(S, all_solutions[i]; start_parameters = [sin(ω_val * times[i])], target_parameters = [sin(ω_val * t_val)])
-        all_solutions[i+1] = solutions(result)
-        all_real_solutions[i+1] = real_solutions(result)
-        H_solve = subs(H_0, a_sym => sin(ω_val * t_val))
-        info = map(x_sol -> (x_sol, is_minimum(x_sol, H_solve, q)), real_sols)
-        stable_real_sols = [x for (x, is_stable) in info if is_stable]
-        stable_solutions[i+1] = stable_real_sols
-
-    end
-
-    return stable_solutions
+    return data_points
 end
 
 
@@ -110,17 +89,27 @@ function parallel_find_equilibria(n::Int, times, ω_matrix, r0_matrix, r1_matrix
 end
 
 
+ω = 2.0
+r0_val = 0.0
+r1_val = 0.5
+n = 8
+T = 2π / ω
+times = 0.0:0.1:0.1
+result = find_equilibria_series(n, times, ω, r0_val, r1_val)
 
-#omegas = [[[1.0, 1.0], [1.0, 1.0]], [[1.0, 1.0], [1.0, 1.0]],
-#        [[2.0, 2.0], [2.0, 2.0]], [[2.0, 2.0], [2.0, 2.0]]]
 
-#r0s = [[[0.5, 0.5], [0.8, 0.8]], [[0.5, 0.5], [0.8, 0.8]],
-#        [[0.5, 0.5], [0.8, 0.8]], [[0.5, 0.5], [0.8, 0.8]]]
+#=
 
-#r1s = [[[0.2, 0.5], [0.2, 0.5]], [[0.2, 0.5], [0.2, 0.5]],
-#        [[0.2, 0.5], [0.2, 0.5]], [[0.2, 0.5], [0.2, 0.5]]]
+omegas = [[[1.0, 1.0], [1.0, 1.0]], [[1.0, 1.0], [1.0, 1.0]],
+        [[2.0, 2.0], [2.0, 2.0]], [[2.0, 2.0], [2.0, 2.0]]]
 
-#result = parallel_find_equilibria(2, 0:0.1:10, omegas, r0s, r1s)
+r0s = [[[0.5, 0.5], [0.8, 0.8]], [[0.5, 0.5], [0.8, 0.8]],
+        [[0.5, 0.5], [0.8, 0.8]], [[0.5, 0.5], [0.8, 0.8]]]
+
+r1s = [[[0.2, 0.5], [0.2, 0.5]], [[0.2, 0.5], [0.2, 0.5]],
+        [[0.2, 0.5], [0.2, 0.5]], [[0.2, 0.5], [0.2, 0.5]]]
+
+result = parallel_find_equilibria(2, 0:0.1:10, omegas, r0s, r1s)
 
 using Plots
 ω = 2.0
@@ -142,25 +131,25 @@ vline!([T / 4, T / 2, 3 * T / 4, T], label=nothing)
 display(current()) 
 
 
-#for i in 1:length(result)
-#    @show i
-#    println(length(result[i]))
-#end
+for i in 1:length(result)
+    @show i
+    println(length(result[i]))
+end
 
-#x1_over_time = [result[t][1][2] for t in eachindex(result)]
-#x2_over_time = [result[t][2][2] for t in eachindex(result)]
-#x3_over_time = [result[t][3][2] for t in eachindex(result)]
-#x4_over_time = [result[t][4][2] for t in eachindex(result)]
+x1_over_time = [result[t][1][2] for t in eachindex(result)]
+x2_over_time = [result[t][2][2] for t in eachindex(result)]
+x3_over_time = [result[t][3][2] for t in eachindex(result)]
+x4_over_time = [result[t][4][2] for t in eachindex(result)]
 
 
-#using Plots
-#plot(times, x1_over_time, xlabel="t", ylabel="x2", label="Solution 1")
-#plot!(times, x2_over_time, label="Solution 2")
-#plot!(times, x3_over_time, label="Solution 3")
-#plot!(times, x4_over_time, label="Solution 4")
+using Plots
+plot(times, x1_over_time, xlabel="t", ylabel="x2", label="Solution 1")
+plot!(times, x2_over_time, label="Solution 2")
+plot!(times, x3_over_time, label="Solution 3")
+plot!(times, x4_over_time, label="Solution 4")
 
 #All time points calculated indepedently
-"""
+
 ω = 2.0
 r0_val = 0.4
 r1_val = 0.5
@@ -214,6 +203,6 @@ end
 
 plot(r1_val, result_length, xlabel=L"r_1", ylabel="# solutions", label="Stable solutions", ylims=(0,18))
 
-"""
+=#
 
 
