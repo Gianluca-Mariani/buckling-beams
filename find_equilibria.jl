@@ -37,6 +37,8 @@ function symbolic_potential(n::Int)
 end
 
 
+
+
 # Main solver using parameter homotopy
 function find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64)
     # Initialize variables
@@ -48,11 +50,10 @@ function find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::
     S = System(grad_0; variables = q, parameters = [a_sym])
 
     # Initial solve with complex parameter
-    println("Initial step")
     start_parameter = randn(ComplexF64, 1)
-    result = solve(S; target_parameters = start_parameter)
+    result = solve(S; target_parameters = start_parameter, start_system=:total_degree)
+    
 
-    println("Homotopy Tracking")
     # generate some random data to simulate the parameters
     data = [[sin(ω_val * times[i])] for i in eachindex(times)]
 
@@ -62,12 +63,26 @@ function find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::
     solutions(result);
     start_parameters = start_parameter,
     target_parameters = data,
-    transform_result = (r,p) -> real_solutions(r)
+    start_system=:total_degree,
+    transform_result = (r,p) -> solutions(r)
     )
-
-    return data_points
+    
+    return solutions(result)
 end
 
+
+function generate_combinations(n::Int, z::Vector{ComplexF64})
+  num_combinations = 3^n
+  x = Vector{Vector{ComplexF64}}(undef, num_combinations)
+
+  indices = Iterators.product(fill(1:length(z), n)...)
+
+  for (i, index_tuple) in enumerate(indices)
+    x[i] = [z[j] for j in index_tuple]
+  end
+
+  return x
+end
 
 function parallel_find_equilibria(n::Int, times, ω_matrix, r0_matrix, r1_matrix)
 
@@ -89,16 +104,37 @@ function parallel_find_equilibria(n::Int, times, ω_matrix, r0_matrix, r1_matrix
 end
 
 
+num_sol = zeros(Int64, 100)
 ω = 2.0
-r0_val = 0.0
-r1_val = 0.5
-n = 8
+r0_val = 0.5
+r1_val = 0.0
+n = 4
 T = 2π / ω
-times = 0.0:0.1:0.1
-result = find_equilibria_series(n, times, ω, r0_val, r1_val)
-
-
+times = 0.0:0.1:0.0
+for i in eachindex(num_sol)
+    num_sol[i] = length(find_equilibria_series(n, times, ω, r0_val, r1_val))
+end
+using Plots
+histogram(num_sol, bins= 9, xlabel="Number of solutions", ylabel="Frequency")
 #=
+
+@var y[1:n]
+grad, H, q, r0_sym, r1_sym, a_sym = symbolic_potential(n)
+grad_0 = subs(grad, r0_sym => r0_val, r1_sym => r1_val, a_sym => sin(ω * times[18 ]))
+F = System(grad_0; variables = q)
+
+# construct start system and homotopy
+G = System(im * (y.^3 .- 1))
+H = StraightLineHomotopy(G, F)
+z = [1, exp(2im * π / 3), exp(-2im * π / 3)]
+start_solutions = generate_combinations(n, z)
+# construct tracker
+tracker = Tracker(H)
+# track each start solution separetely
+results = track.(tracker, start_solutions)
+println("# successfull: ", count(is_success, results))
+
+
 
 omegas = [[[1.0, 1.0], [1.0, 1.0]], [[1.0, 1.0], [1.0, 1.0]],
         [[2.0, 2.0], [2.0, 2.0]], [[2.0, 2.0], [2.0, 2.0]]]
