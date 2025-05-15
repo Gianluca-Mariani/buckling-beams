@@ -25,49 +25,55 @@ function symbolic_potential(n::Int)
     """
     @var r₀ r₁ a
     @var q[1:n]
+    @var off
 
     phi = i -> (i % 4 == 0) || (i % 4 == 3) ? 1.0 : -1.0
-    V = sum(0.5 * ((-1)^(i-1) + r₀ * phi(i-1) * a) * q[i]^2 + 0.25 * q[i]^4 for i in 1:n)
+    V = sum(0.5 * ((-1)^(i-1) + r₀ * phi(i-1) * a) * q[i]^2 + 0.25 * q[i]^4 + q[i] * off for i in 1:n)
     V += sum(0.5 * r₁ * (q[i+1] - q[i])^2 for i in 1:n-1)
     V += 0.5 * r₁ * (q[1] - q[n])^2
 
     grad = differentiate(V, q)
     H = differentiate(grad, q)
-    return grad, H, q, r₀, r₁, a
+    return grad, H, q, r₀, r₁, a, off
 end
-
-
 
 
 # Main solver using parameter homotopy
 function find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64)
     # Initialize variables
-    grad, H, q, r0_sym, r1_sym, a_sym = symbolic_potential(n)
+    grad, H, q, r0_sym, r1_sym, a_sym, off_sym = symbolic_potential(n)
 
     # Make substitutions that need to be done only once
     grad_0 = subs(grad, r0_sym => r0_val, r1_sym => r1_val)
     H_0 = subs(H, r0_sym => r0_val, r1_sym => r1_val)
-    S = System(grad_0; variables = q, parameters = [a_sym])
+    S = System(grad_0; variables = q, parameters = [a_sym, off_sym])
 
     # Initial solve with complex parameter
-    start_parameter = randn(ComplexF64, 1)
-    result = solve(S; target_parameters = start_parameter, start_system=:total_degree)
+    start_a = randn(ComplexF64)
+    start_off = randn(ComplexF64)
+    start_parameters = [start_a, start_off]
     
-
-    # generate some random data to simulate the parameters
-    data = [[sin(ω_val * times[i])] for i in eachindex(times)]
+    result = solve(S; target_parameters = start_parameters, start_system=:total_degree)
+    # generate all parameter values
+    data = [[sin(ω_val * times[i]), 0.0] for i in eachindex(times)]
 
     # track p₀ towards the entries of data
     data_points = solve(
     S,
     solutions(result);
-    start_parameters = start_parameter,
+    start_parameters = start_parameters,
     target_parameters = data,
     start_system=:total_degree,
-    transform_result = (r,p) -> solutions(r)
+    transform_result = (r,p) -> results(r; only_finite = false, multiple_results = true)
     )
-    
-    return solutions(result)
+    unwrapped_data = [result.solution for result in data_points[1]]
+    norms = Vector{Float64}(undef, length(unwrapped_data))
+    for (i, data) in enumerate(unwrapped_data)
+        res = subs(grad_0, a_sym => (sin(ω_val * times[1])), off_sym => 0.0 + 0.0im, q => data)
+        norms[i] = norm(ComplexF64.(res))
+    end
+    println("Norms of the solutions: ", maximum(norms))
+    return unwrapped_data
 end
 
 
@@ -90,7 +96,6 @@ function parallel_find_equilibria(n::Int, times, ω_matrix, r0_matrix, r1_matrix
     ω_vec = vec(ω_matrix)
     r0_vec = vec(r0_matrix)
     r1_vec = vec(r1_matrix)
-    @show ω_vec
 
     # Form parameter list as tuples
     param_list = [(ω, r0, r1) for (ω, r0, r1) in zip(ω_vec, r0_vec, r1_vec)]
@@ -107,7 +112,7 @@ end
 num_sol = zeros(Int64, 100)
 ω = 2.0
 r0_val = 0.5
-r1_val = 0.0
+r1_val = 0.5
 n = 4
 T = 2π / ω
 times = 0.0:0.1:0.0
@@ -120,7 +125,7 @@ histogram(num_sol, bins= 9, xlabel="Number of solutions", ylabel="Frequency")
 
 @var y[1:n]
 grad, H, q, r0_sym, r1_sym, a_sym = symbolic_potential(n)
-grad_0 = subs(grad, r0_sym => r0_val, r1_sym => r1_val, a_sym => sin(ω * times[18 ]))
+grad_0 = subs(grad, r0_sym => r0_val, r1_sym => r1_val, a_sym => sin(ω * times[1]))
 F = System(grad_0; variables = q)
 
 # construct start system and homotopy
@@ -132,7 +137,39 @@ start_solutions = generate_combinations(n, z)
 tracker = Tracker(H)
 # track each start solution separetely
 results = track.(tracker, start_solutions)
+tracked_solutions = [result.solution for result in results if is_success(result)]
 println("# successfull: ", count(is_success, results))
+
+function group_close_solutions(solutions; tol=1e-8)
+    groups = []
+
+    for sol in solutions
+        # Check if this solution is close to an existing group
+        matched = false
+        for group in groups
+            if any(norm(sol .- member) < tol for member in group)
+                push!(group, sol)
+                matched = true
+                break
+            end
+        end
+        if !matched
+            push!(groups, [sol])
+        end
+    end
+
+    return groups
+end
+
+groups = group_close_solutions(tracked_solutions)
+
+println("Grouped solutions:")
+for (i, group) in enumerate(groups)
+    println("Group $i (size $(length(group))):")
+    for sol in group
+        println("  ", sol)
+    end
+end
 
 
 
