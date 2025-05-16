@@ -1,6 +1,5 @@
 using DynamicPolynomials, HomotopyContinuation, LinearAlgebra, ThreadsX
 
-
 """
 is_minimum(Vector{Float64}, Matrix{<:Polynomial}, Vector{<:DynamicPolynomials.Variable}) -> Boolean
 Returns true if the Hessian matrix is positive definite at the given solution, false otherwise (also for errors).
@@ -14,7 +13,6 @@ function is_minimum(x_sol::Vector{Float64}, H_evaluated::Matrix{<:Polynomial}, q
     return isposdef(H_mat) # return true if the Hessian is positive definite
 
 end
-
 
 """
 symbolic_potential(n::Int) -> (Vector{Polynomial}, Matrix{Polynomial}, Vector{Polynomial}, Polynomial, Polynomial, Polynomial, Polynomial)
@@ -46,10 +44,33 @@ function symbolic_potential(n::Int)
     return grad, H, q, r₀, r₁, a, off
 end
 
+"""
+    find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64)
 
-# Main solver using parameter homotopy
+Tracks equilibria of a symbolic potential system as a function of time-varying parameters.
+
+# Arguments
+- `n::Int`: The number of variables (number of beams in the chain).
+- `times::AbstractVector{Float64}`: A vector of time points at which to evaluate the system.
+- `ω_val::Float64`: Frequency used in the time-dependent modulation of parameter `a`.
+- `r0_val::Float64`: Numerical value for the dynamic stiffness parameter `r₀`.
+- `r1_val::Float64`: Numerical value for the coupling parameter `r₁`.
+
+# Returns
+- `unwrapped_data::Vector{Vector{Vector{ComplexF64}}}`: A list of solutions (as vectors of complex numbers) for each time point, corresponding to equilibrium points tracked from the homotopy continuation.
+- `H_0::Matrix{Expression}`: The symbolic Hessian matrix of the potential, with all parameters except `a` substituted.
+
+# Notes
+- Uses homotopy continuation to track solutions from random complex initial parameters to a family of real parameters depending on `sin(ω * t)`.
+- Solutions are not filtered to be real; all reachable tracked solutions (including complex) are returned.
+- This function uses a symbolic gradient defined via `symbolic_potential`.
+- only_finite = false, multiple_results = true are needed to not discard some valid solutions
+
+# Dependencies
+Requires a symbolic differentiation library such as `Symbolics.jl`, and a solver package capable of homotopy continuation (e.g., `HomotopyContinuation.jl`).
+
+"""
 function find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64)
-    """Missing Documentation"""
     # Initialize variables
     grad, H, q, r0_sym, r1_sym, a_sym, off_sym = symbolic_potential(n)
     H_0 = subs(H, r0_sym => r0_val, r1_sym => r1_val, off_sym => 0.0)
@@ -80,39 +101,38 @@ function find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::
     return unwrapped_data, H_0
 end
 
+"""
+generate_combinations(n::Int, z::Vector{ComplexF64}) -> Vector{Vector{ComplexF64}}
 
+Generates all possible combinations (with replacement) of `n` elements taken from vector `z`.
+
+Each combination is represented as a vector of length `n`, where each element is selected from `z`.
+The total number of combinations is `length(z)^n`.
+
+# Arguments
+- `n::Int`: The number of elements in each combination.
+- `z::Vector{ComplexF64}`: The vector of complex values to draw from.
+
+# Returns
+- `Vector{Vector{ComplexF64}}`: A vector containing all combinations of length `n`, where each element is a copy of a combination vector.
+
+# Example
+```julia
+z = [1 + 0im, -1 + 0im, 0 + 1im]
+generate_combinations(2, z)
+# Returns: [[1+0im, 1+0im], [1+0im, -1+0im], ..., [0+1im, 0+1im]]
+"""
 function generate_combinations(n::Int, z::Vector{ComplexF64})
-    """
-    Missing Documentation
-    """
-  num_combinations = 3^n
-  x = Vector{Vector{ComplexF64}}(undef, num_combinations)
+    num_combinations = length(z)^n
+    x = Vector{Vector{ComplexF64}}(undef, num_combinations)
 
-  indices = Iterators.product(fill(1:length(z), n)...)
+    indices = Iterators.product(fill(1:length(z), n)...)
 
-  for (i, index_tuple) in enumerate(indices)
-    x[i] = [z[j] for j in index_tuple]
-  end
+    for (i, index_tuple) in enumerate(indices)
+        x[i] = [z[j] for j in index_tuple]
+    end
 
   return x
-end
-
-function parallel_find_equilibria(n::Int, times, ω_matrix, r0_matrix, r1_matrix)
-
-    # Flatten parameter arrays (same order)
-    ω_vec = vec(ω_matrix)
-    r0_vec = vec(r0_matrix)
-    r1_vec = vec(r1_matrix)
-
-    # Form parameter list as tuples
-    param_list = [(ω, r0, r1) for (ω, r0, r1) in zip(ω_vec, r0_vec, r1_vec)]
-
-    # Map over parameter list
-    results_vec = ThreadsX.map(((ω, r0, r1),) -> find_equilibria_series(n, times, ω, r0, r1), param_list)
-
-    # Reshape back to original shape
-    results = reshape(results_vec, size(omega))
-    return results
 end
 
 """
@@ -122,24 +142,50 @@ Arguments:
 - `n::Int`: Number of degrees of freedom (chain length).
 - `time::Float64`: Time at which the equilibrium is evaluated.
 - `ω_val::Float64`: Frequency parameter.
-- `r0_val::Float64`, `r1_val::Float64`: Coupling constants.
+- `r0_val::Float64`, `r1_val::Float64`: Non-dimensional constants.
 - `reps::Int`: Number of repetitions.
 
 Returns:
 - `num_sol::Vector{Int64}`: Number of solutions found in each repetition.
-
-Note:
-- Possible improvement: parallelize the for-loop for performance.
 """
 function get_number_of_solutions(n::Int, time::Float64, ω_val::Float64, r0_val::Float64, r1_val::Float64, reps::Int)
-    num_sol = zeros(Int64, reps)
-    for i in 1:reps
-        num_sol[i] = length(find_equilibria_series(n, [time], ω_val, r0_val, r1_val)[1][1])
+    num_sol = Vector{Int}(undef, reps)
+    redirect_stdout(devnull) do
+        for i in 1:reps
+            num_sol[i] = length(find_equilibria_series(n, [time], ω_val, r0_val, r1_val)[1][1])
+        end
     end
     return num_sol
 end
 
-"""Documentation needed"""
+
+"""
+use_homotopy_tracker(n::Int, time::Float64, ω_val::Float64, r0_val::Float64, r1_val::Float64) 
+    -> Vector{Vector{ComplexF64}}
+
+Tracks solutions to a parameterized polynomial system using a manually constructed homotopy and tracker.
+
+This function implements a **manual homotopy continuation** approach using the `HomotopyContinuation.jl` package. It constructs a symbolic potential energy gradient, defines a simple start system with known roots (the complex cube roots of unity), and then tracks these known solutions toward the solutions of the target system. This is a more low-level alternative to calling `solve(...)` directly with parameter tracking.
+
+# Arguments
+- `n::Int`: Number of variables in the system (i.e.: number of beams in the chain).
+- `time::Float64`: Time value used to compute the time-dependent parameter `a = sin(ω * t)`.
+- `ω_val::Float64`: Frequency used in the time-dependent parameter.
+- `r0_val::Float64`: Dynamic stiffness parameter for the potential function.
+- `r1_val::Float64`: Coupling parameter for nearest-neighbor interactions.
+
+# Returns
+- `Vector{Vector{ComplexF64}}`: A vector of successful tracked solutions (complex-valued vectors of length `n`), obtained from homotopy continuation starting at the roots of the simplified start system.
+
+# Notes
+- The start system is defined as `y_i^3 - 1 = 0` for each variable, whose known solutions are the complex cube roots of unity (total degree homotopy)
+- This method is lower-level and more explicit than using `solve(System(...); target_parameters = ...)`, which handles tracking, solution validation, and path failures more automatically.
+- Tracking is done with `track.(...)`, and only successful paths are returned.
+
+# Example
+```julia
+solutions = use_homotopy_tracker(3, 1.0, 2π, 1.0, 1.0)
+"""
 function use_homotopy_tracker(n::Int, time::Float64, ω_val::Float64, r0_val::Float64, r1_val::Float64)
     # Get symbolic potential and substitute fixed parameters values
     grad, _, q, r0_sym, r1_sym, a_sym, off_sym = symbolic_potential(n)
@@ -163,6 +209,18 @@ function use_homotopy_tracker(n::Int, time::Float64, ω_val::Float64, r0_val::Fl
     tracked_solutions = [result.solution for result in results if is_success(result)]
 
     return tracked_solutions
+end
+
+
+"""Add docs"""
+function get_number_solutions_per_time(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64)
+    result = find_equilibria_series(n, times, ω_val, r0_val, r1_val)
+    
+    result_length = Vector{Int64}(undef, length(times))
+    for i in eachindex(times)
+        result_length[i] = length(result[1][i])
+    end
+    return result_length
 end
 
 #=
@@ -211,29 +269,7 @@ r1s = [[[0.2, 0.5], [0.2, 0.5]], [[0.2, 0.5], [0.2, 0.5]],
 
 result = parallel_find_equilibria(2, 0:0.1:10, omegas, r0s, r1s)
 
-ω = 2.0
-r0_val = 0.2
-r1_val = 0.5
-n = 8
-T = 2π / ω
-times = 0.0:0.1:0.5
-result = find_equilibria_series(n, times, ω, r0_val, r1_val)
-result_length = Vector{Int64}(undef, length(times))
 
-for i in eachindex(times)
-    result_length[i] = length(result[i])
-end
-
-
-plot(times, result_length, xlabel="t", ylabel="# solutions", label="Stable solutions", legend=:bottom)
-vline!([T / 4, T / 2, 3 * T / 4, T], label=nothing) 
-display(current()) 
-
-
-for i in 1:length(result)
-    @show i
-    println(length(result[i]))
-end
 
 x1_over_time = [result[t][1][2] for t in eachindex(result)]
 x2_over_time = [result[t][2][2] for t in eachindex(result)]
@@ -247,45 +283,6 @@ plot!(times, x2_over_time, label="Solution 2")
 plot!(times, x3_over_time, label="Solution 3")
 plot!(times, x4_over_time, label="Solution 4")
 
-#All time points calculated indepedently
-
-ω = 2.0
-r0_val = 0.4
-r1_val = 0.5
-n = 8
-T = 2π / ω
-times = 0.0:0.05:T
-stable_solutions = Vector{Vector{Vector{Float64}}}(undef, length(times))
-grad, H, q, r0_sym, r1_sym, a_sym = symbolic_potential(n)
-
-# Make substitutions that need to be done only once
-grad_0 = subs(grad, r0_sym => r0_val, r1_sym => r1_val)
-H_0 = subs(H, r0_sym => r0_val, r1_sym => r1_val)
-S = System(grad_0, variables = q, parameters = [a_sym])
-real_len = Vector{Float64}(undef, length(times))
-stable_len = Vector{Float64}(undef, length(times))
-real_sols = Vector{Vector{Vector{Float64}}}(undef, length(times))
-stable_sols = Vector{Vector{Vector{Float64}}}(undef, length(times))
-
-for i in eachindex(times)
-    real_sols[i] = find_real_starting_points(times[i], ω, S)
-    real_len[i] = length(real_sols[i])
-    H_solve = subs(H_0, a_sym => sin(ω * times[i]))
-    info = map(x_sol -> (x_sol, is_minimum(x_sol, H_solve, q)), real_sols[i])
-    stable_real_sols = [x for (x, is_stable) in info if is_stable]
-    stable_sols[i] = stable_real_sols
-    stable_len[i] = length(stable_real_sols)
-end 
-
-#rounded_sols = map(x -> map(y -> round.(y; digits=2), x), stable_sols)
-#println(rounded_sols)
-
-using Plots
-
-plot(times, real_len, xlabel="t", ylabel="# solutions", label="Real solutions")
-plot!(times, stable_len, label="Stable solutions")
-vline!([T / 4, T / 2, 3 * T / 4, T], label=nothing) 
-display(current())
 
 using Plots
 using LaTeXStrings
@@ -304,4 +301,24 @@ plot(r1_val, result_length, xlabel=L"r_1", ylabel="# solutions", label="Stable s
 
 =#
 
+## TODO: regroup complex solutions into paths
+## TODO: flag real and stable solutions
+## TODO: parameter sweeps
 
+
+function parallel_find_equilibria(n::Int, times, ω_matrix, r0_matrix, r1_matrix)
+    # Flatten parameter arrays (same order)
+    ω_vec = vec(ω_matrix)
+    r0_vec = vec(r0_matrix)
+    r1_vec = vec(r1_matrix)
+
+    # Form parameter list as tuples
+    param_list = [(ω, r0, r1) for (ω, r0, r1) in zip(ω_vec, r0_vec, r1_vec)]
+
+    # Map over parameter list
+    results_vec = ThreadsX.map(((ω, r0, r1),) -> find_equilibria_series(n, times, ω, r0, r1), param_list)
+
+    # Reshape back to original shape
+    results = reshape(results_vec, size(omega))
+    return results
+end
