@@ -212,7 +212,29 @@ function use_homotopy_tracker(n::Int, time::Float64, ω_val::Float64, r0_val::Fl
 end
 
 
-"""Add docs"""
+"""
+get_number_solutions_per_time(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64)
+    -> Vector{Int64}
+
+Returns the number of equilibrium solutions found at each point in time during the evolution of a parameterized polynomial system.
+
+This function computes the number of solutions obtained by homotopy continuation at each time in the provided time vector. It uses `find_equilibria_series` to compute the tracked solutions for each time-dependent parameter configuration and extracts the count of solutions at each time step.
+
+# Arguments
+- `n::Int`: Number of variables in the system (e.g., length of the chain).
+- `times::AbstractVector{Float64}`: A vector of time points over which to evaluate the solution count.
+- `ω_val::Float64`: Angular frequency used in the time-dependent modulation (e.g., in `a = sin(ωt)`).
+- `r0_val::Float64`: Dynamic stiffness parameter for the potential function.
+- `r1_val::Float64`: Coupling parameter between neighboring elements.
+
+# Returns
+- `Vector{Int64}`: A vector of the same length as `times`, where each entry contains the number of equilibrium solutions found at the corresponding time.
+
+# Example
+```julia
+times = 0:0.1:10
+counts = get_number_solutions_per_time(4, times, 1.0, 0.5, 0.8)
+"""
 function get_number_solutions_per_time(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64)
     result = find_equilibria_series(n, times, ω_val, r0_val, r1_val)
     
