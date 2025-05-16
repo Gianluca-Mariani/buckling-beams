@@ -1,4 +1,4 @@
-using DynamicPolynomials, HomotopyContinuation, LinearAlgebra, ThreadsX
+using DynamicPolynomials, HomotopyContinuation, LinearAlgebra, ThreadsX, Plots
 
 
 # Check if a solution is a minimum based on the Hessian matrix
@@ -66,13 +66,7 @@ function find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::
     start_system=:total_degree,
     transform_result = (r,p) -> results(r; only_finite = false, multiple_results = true)
     )
-    unwrapped_data = [result.solution for result in data_points[1]]
-    norms = Vector{Float64}(undef, length(unwrapped_data))
-    for (i, data) in enumerate(unwrapped_data)
-        res = subs(grad_0, a_sym => (sin(ω_val * times[1])), off_sym => 0.0 + 0.0im, q => data)
-        norms[i] = norm(ComplexF64.(res))
-    end
-    println("Norms of the solutions: ", maximum(norms))
+    unwrapped_data = [[result.solution for result in data_point] for data_point in data_points]
     return unwrapped_data
 end
 
@@ -109,18 +103,18 @@ function parallel_find_equilibria(n::Int, times, ω_matrix, r0_matrix, r1_matrix
 end
 
 
-num_sol = zeros(Int64, 100)
-ω = 2.0
-r0_val = 0.5
-r1_val = 0.5
-n = 4
-T = 2π / ω
-times = 0.0:0.1:0.0
-for i in eachindex(num_sol)
-    num_sol[i] = length(find_equilibria_series(n, times, ω, r0_val, r1_val))
+function get_number_of_solutions(n::Int, time::Float64, ω_val::Float64, r0_val::Float64, r1_val::Float64, reps::Int)
+    """
+    Documentation needed. Possible improvements: parallelize the for loop, give control over the number of bins
+    """
+    num_sol = zeros(Int64, reps)
+    for i in 1:reps
+        num_sol[i] = length(find_equilibria_series(n, [time], ω_val, r0_val, r1_val)[1])
+    end
+    histogram(num_sol, xlabel="Number of solutions", ylabel="Frequency")
 end
-using Plots
-histogram(num_sol, bins= 9, xlabel="Number of solutions", ylabel="Frequency")
+
+
 #=
 
 @var y[1:n]
