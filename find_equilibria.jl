@@ -59,6 +59,8 @@ Tracks equilibria of a symbolic potential system as a function of time-varying p
 # Returns
 - `unwrapped_data::Vector{Vector{Vector{ComplexF64}}}`: A list of solutions (as vectors of complex numbers) for each time point, corresponding to equilibrium points tracked from the homotopy continuation.
 - `H_0::Matrix{Expression}`: The symbolic Hessian matrix of the potential, with all parameters except `a` substituted.
+- `a`: a symbolic variable
+- `q`: a symbolic variable
 
 # Notes
 - Uses homotopy continuation to track solutions from random complex initial parameters to a family of real parameters depending on `sin(ω * t)`.
@@ -98,7 +100,7 @@ function find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::
     transform_result = (r,p) -> results(r; only_finite = false, multiple_results = true)
     )
     unwrapped_data = [[result.solution for result in data_point] for data_point in data_points]
-    return unwrapped_data, H_0
+    return unwrapped_data, (H = H_0, a_sym = a_sym, q = q)
 end
 
 """
@@ -302,42 +304,39 @@ function align_solutions(data::Vector{Vector{Vector{ComplexF64}}})
     return aligned
 end
 
+"""
+    is_solution_real(solution::Vector{ComplexF64}; tol::Float64 = 1e-8) -> Boolean
+
+returns true if the input solution is real up to a tolerance value
+
+# Arguments
+- `solution::Vector{ComplexF64}`: A solution array of complex numbers for all coordinates values
+  - tol::Float64: tolerance for considering the array real
+
+# Description
+Returns true if the L2 norm of the imaginary part of the input solution is smaller than the input tolerance
+"""
+function is_solution_real(solution::Vector{ComplexF64}; tol::Float64 = 1e-6)
+    return norm(imag(solution))  < tol
+
+end
+
+function mark_real(data::Vector{Vector{Vector{ComplexF64}}})
+    real_mask = [[is_solution_real(solution) for solution in time_step] for time_step in data]
+    return real_mask
+end
+
+function mark_real_stable(data::Vector{Vector{Vector{ComplexF64}}}, ω_val::Float64, times::AbstractVector{Float64}, H::Matrix{Expression}, a_sym, q, real_mask::Vector{Vector{Bool}})
+    real_stable_mask = deepcopy(data)
+    for (i, time) in enumerate(times)
+        H_time = subs(H, a_sym => sin(ω_val * time))
+        real_stable_mask[i] = [real_mask[i][j] && is_minimum(sol, H_time, q) for (j, sol) in enumerate(data[i])]
+    end
+    return real_stable_mask
+end
 
 
 #=
-
-function group_close_solutions(solutions; tol=1e-8)
-    groups = []
-
-    for sol in solutions
-        # Check if this solution is close to an existing group
-        matched = false
-        for group in groups
-            if any(norm(sol .- member) < tol for member in group)
-                push!(group, sol)
-                matched = true
-                break
-            end
-        end
-        if !matched
-            push!(groups, [sol])
-        end
-    end
-
-    return groups
-end
-
-groups = group_close_solutions(tracked_solutions)
-
-println("Grouped solutions:")
-for (i, group) in enumerate(groups)
-    println("Group $i (size $(length(group))):")
-    for sol in group
-        println("  ", sol)
-    end
-end
-
-
 
 omegas = [[[1.0, 1.0], [1.0, 1.0]], [[1.0, 1.0], [1.0, 1.0]],
         [[2.0, 2.0], [2.0, 2.0]], [[2.0, 2.0], [2.0, 2.0]]]
@@ -382,7 +381,6 @@ plot(r1_val, result_length, xlabel=L"r_1", ylabel="# solutions", label="Stable s
 
 =#
 
-## TODO: regroup complex solutions into paths
 ## TODO: flag real and stable solutions
 ## TODO: parameter sweeps
 
