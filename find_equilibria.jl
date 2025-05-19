@@ -1,4 +1,4 @@
-using DynamicPolynomials, HomotopyContinuation, LinearAlgebra, ThreadsX
+using DynamicPolynomials, HomotopyContinuation, LinearAlgebra, ThreadsX, Munkres
 
 """
 is_minimum(Vector{Float64}, Matrix{<:Polynomial}, Vector{<:DynamicPolynomials.Variable}) -> Boolean
@@ -244,6 +244,65 @@ function get_number_solutions_per_time(n::Int, times::AbstractVector{Float64}, Ï
     end
     return result_length
 end
+
+
+"""
+    align_solutions(data::Vector{Vector{Vector{ComplexF64}}}) -> Vector{Vector{Vector{ComplexF64}}}
+
+Aligns time-evolving solutions to ensure consistent ordering across time steps by minimizing pairwise squared Euclidean distances using the Hungarian (Munkres) algorithm.
+
+# Arguments
+- `data::Vector{Vector{Vector{ComplexF64}}}`: A nested array where:
+  - The outer vector has length `T`, representing `T` time steps,
+  - Each middle vector has length `S`, representing `S` solutions at that time,
+  - Each inner vector contains the complex coordinates of a given solution at that time step.
+
+# Description
+This function reorders the solutions at each time step to match the closest solutions from the previous time step, minimizing the total squared Euclidean distance between matched solution vectors.
+
+For each pair of consecutive time steps `t` and `t+1`, it:
+1. Computes a cost matrix of pairwise distances between solutions,
+2. Solves the optimal assignment problem using the `munkres()` algorithm,
+3. Reorders the solutions at time `t+1` based on the assignment.
+
+# Returns
+- A reordered deep copy of `data`, with solutions at each time step aligned consistently based on proximity.
+
+# Assumptions
+- The number of solutions (`S`) is constant across time steps.
+- Each solution is represented as a vector of complex numbers (e.g., multivariate state).
+
+# Example
+```julia
+aligned_data = align_solutions(solution_data)
+"""
+function align_solutions(data::Vector{Vector{Vector{ComplexF64}}})
+    T = length(data)
+    S = length(data[1])
+
+    aligned = deepcopy(data)
+
+    for t in 1:(T - 1)
+        A = aligned[t]     # solutions at time t
+        B = data[t + 1]    # original solutions at time t+1
+
+        # Build cost matrix (S x S) of squared Euclidean distances
+        cost_matrix = zeros(S, S)
+        for i in 1:S, j in 1:S
+            cost_matrix[i, j] = sum(abs2, A[i] .- B[j])
+        end
+
+        # Solve the assignment problem
+        col_idx = munkres(cost_matrix)
+
+        # Reorder B according to assignment
+        aligned[t + 1] = [B[j] for j in col_idx]
+    end
+
+    return aligned
+end
+
+
 
 #=
 
