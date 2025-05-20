@@ -1,12 +1,18 @@
-using DynamicPolynomials, HomotopyContinuation, LinearAlgebra, ThreadsX, Munkres
+using HomotopyContinuation, LinearAlgebra, ThreadsX, Munkres
 
 """
-is_minimum(Vector{Float64}, Matrix{<:Polynomial}, Vector{<:DynamicPolynomials.Variable}) -> Boolean
-Returns true if the Hessian matrix is positive definite at the given solution, false otherwise (also for errors).
+is_minimum(Vector{Float64}, Matrix{Expression}, Vector{HomotopyContinuation.ModelKit.Variable}) -> Boolean
+
+# Arguments
+- `x_sol::Vector{Float64}`: The numerical solution where the Hessian is to be evaluated.
+- `H_evaluated::Matrix{Expression}`: The symbolic Hessian with only the q variables left unsubstituted.
+- `q::Vector{HomotopyContinuation.ModelKit.Variable}`: coordinate symbolic array, must be of same length as `x_sol`.
+
+Returns true if the Hessian matrix is positive definite at the given solution, false otherwise.
 """
-function is_minimum(x_sol::Vector{Float64}, H_evaluated::Matrix{<:Polynomial}, q::AbstractVector{<:DynamicPolynomials.Variable})
+function is_minimum(x_sol::Vector{Float64}, H_evaluated::Matrix{Expression}, q::Vector{HomotopyContinuation.ModelKit.Variable})
     
-    H_num = coefficient.(subs(H_evaluated, q=>x_sol), q[1]^0) # Unwrap constant polynomials
+    H_num = evaluate(H_evaluated, q=>x_sol)
     d = diag(H_num)
     e = diag(H_num, 1)
     H_mat = SymTridiagonal(d, e)  
@@ -85,8 +91,8 @@ function find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::
     start_a = randn(ComplexF64)
     start_off = randn(ComplexF64)
     start_parameters = [start_a, start_off]
-    
     result = solve(S; target_parameters = start_parameters, start_system=:total_degree)
+
     # generate all parameter values
     data = [[sin(ω_val * times[i]), 0.0] for i in eachindex(times)]
 
@@ -311,7 +317,7 @@ returns true if the input solution is real up to a tolerance value
 
 # Arguments
 - `solution::Vector{ComplexF64}`: A solution array of complex numbers for all coordinates values
-  - tol::Float64: tolerance for considering the array real
+- `tol::Float64`: tolerance for considering the array real
 
 # Description
 Returns true if the L2 norm of the imaginary part of the input solution is smaller than the input tolerance
@@ -321,16 +327,49 @@ function is_solution_real(solution::Vector{ComplexF64}; tol::Float64 = 1e-6)
 
 end
 
-function mark_real(data::Vector{Vector{Vector{ComplexF64}}})
-    real_mask = [[is_solution_real(solution) for solution in time_step] for time_step in data]
+"""
+    mark_real(data::Vector{Vector{Vector{ComplexF64}}}) -> Vector{Vector{Boolean}}
+
+Maps each vector solution in the input vector to a boolean value, which is true if the solution is real
+
+# Arguments
+- `data::Vector{Vector{Vector{ComplexF64}}}`: Array of all solutions at all time steps (possibly re-ordered by `align_solutions`)
+- `tol::Float64`: tolerance for considering the array real
+
+# Description
+Returns true for each solution if the solution is real, false otherwise
+"""
+function mark_real(data::Vector{Vector{Vector{ComplexF64}}}; tol::Float64 = 1e-6)
+    real_mask = [[is_solution_real(solution; tol) for solution in time_step] for time_step in data]
     return real_mask
 end
 
-function mark_real_stable(data::Vector{Vector{Vector{ComplexF64}}}, ω_val::Float64, times::AbstractVector{Float64}, H::Matrix{Expression}, a_sym, q, real_mask::Vector{Vector{Bool}})
-    real_stable_mask = deepcopy(data)
+"""
+    mark_real_stable(data::Vector{Vector{Vector{ComplexF64}}}) -> Vector{Vector{Boolean}}
+
+Maps each vector solution in the input vector to a boolean value, which is true if the solution is real
+
+# Arguments
+- `data::Vector{Vector{Vector{ComplexF64}}}`: Array of all solutions at all time steps (possibly re-ordered by `align_solutions`)
+- `ω_val::Float64`: numerical value for the frequency
+- `times::Vector{Float64}`: time array with all time point values
+- `sym::NamedTuple`: symbolic named tuple containing the Hessian H, the parameter a, and the variables vector q
+- `real_mask::Vector{Vector{Bool}}`: Nested array of booleans, mapping each solution in data to true if real (possibly returned by `mark_real`)
+
+# Description
+Returns true for each solution if the solution is real, false otherwise
+"""
+function mark_real_stable(data::Vector{Vector{Vector{ComplexF64}}}, ω_val::Float64, times::Vector{Float64}, sym::NamedTuple, real_mask::Vector{Vector{Bool}})
+    real_stable_mask = deepcopy(real_mask)
     for (i, time) in enumerate(times)
-        H_time = subs(H, a_sym => sin(ω_val * time))
-        real_stable_mask[i] = [real_mask[i][j] && is_minimum(sol, H_time, q) for (j, sol) in enumerate(data[i])]
+        H_time = subs(sym.H, sym.a_sym => sin(ω_val * time))
+        for (j, sol) in enumerate(data[i])
+            if real_mask[i][j]
+                real_stable_mask[i][j] = is_minimum(real(sol), H_time, sym.q)
+            else
+                real_stable_mask[i][j] = false
+            end
+        end
     end
     return real_stable_mask
 end
