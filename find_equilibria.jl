@@ -345,21 +345,22 @@ function mark_real(data::Vector{Vector{Vector{ComplexF64}}}; tol::Float64 = 1e-6
 end
 
 """
-    mark_real_stable(data::Vector{Vector{Vector{ComplexF64}}}) -> Vector{Vector{Boolean}}
+    mark_real_stable(data::Vector{Vector{Vector{ComplexF64}}}, ω_val::Float64, times::AbstractVector{Float64}, sym::NamedTuple, real_mask::Vector{Vector{Bool}})
+        -> Vector{Vector{Boolean}}
 
 Maps each vector solution in the input vector to a boolean value, which is true if the solution is real
 
 # Arguments
 - `data::Vector{Vector{Vector{ComplexF64}}}`: Array of all solutions at all time steps (possibly re-ordered by `align_solutions`)
 - `ω_val::Float64`: numerical value for the frequency
-- `times::Vector{Float64}`: time array with all time point values
+- `times::AbstractVector{Float64}`: time array with all time point values
 - `sym::NamedTuple`: symbolic named tuple containing the Hessian H, the parameter a, and the variables vector q
 - `real_mask::Vector{Vector{Bool}}`: Nested array of booleans, mapping each solution in data to true if real (possibly returned by `mark_real`)
 
 # Description
 Returns true for each solution if the solution is real, false otherwise
 """
-function mark_real_stable(data::Vector{Vector{Vector{ComplexF64}}}, ω_val::Float64, times::Vector{Float64}, sym::NamedTuple, real_mask::Vector{Vector{Bool}})
+function mark_real_stable(data::Vector{Vector{Vector{ComplexF64}}}, ω_val::Float64, times::AbstractVector{Float64}, sym::NamedTuple, real_mask::Vector{Vector{Bool}})
     real_stable_mask = deepcopy(real_mask)
     for (i, time) in enumerate(times)
         H_time = subs(sym.H, sym.a_sym => sin(ω_val * time))
@@ -374,6 +375,42 @@ function mark_real_stable(data::Vector{Vector{Vector{ComplexF64}}}, ω_val::Floa
     return real_stable_mask
 end
 
+"""
+    sweep_one_parameter(n::Int, times::AbstractVector{Float64}, ω_val::Float64, sweeping::AbstractVector{Float64}, fixed::Float64, sweep_label::String)
+        -> Vector{Vector{Vector{Boolean}}}, Vector{Vector{Vector{Boolean}}}
+
+Returns two vectors where each entry is the real_mask and real_stable_mask returned by `mark_real` and `mark_real_stable` for each value in sweeping,
+as determined by sweep_label
+
+# Arguments
+- `n::Int`: Number of variables in the system (e.g., length of the chain).
+- `times::AbstractVector{Float64}`: A vector of time points over which to evaluate the solution count.
+- `ω_val::Float64`: Angular frequency used in the time-dependent modulation (e.g., in `a = sin(ωt)`).
+- `sweeping::AbstractVector{Float64}`: Parameter vector to sweep
+- `fixed::Float64`: Fixed parameter not to sweep
+- `sweep_label::String`: Label to discriminate which parameter to sweep, only "r0" and "r1" accepted
+
+"""
+function sweep_one_parameter(n::Int, times::AbstractVector{Float64}, ω_val::Float64, sweeping::AbstractVector{Float64}, fixed::Float64, sweep_label::String)
+    real_results = Vector{Vector{Vector{Bool}}}(undef, length(sweeping))
+    real_stable_results = Vector{Vector{Vector{Bool}}}(undef, length(sweeping))
+
+    for i in eachindex(sweeping)
+        if cmp(sweep_label, "r0") == 0
+            res, sym = find_equilibria_series(n, times, ω_val, sweeping[i], fixed)
+        elseif cmp(sweep_label, "r1") == 0
+            res, sym = find_equilibria_series(n, times, ω_val, fixed, sweeping[i])
+        else
+            throw(ArgumentError("Invalid value for sweep_label: $(sweep_label). Expected \"r0\" or \"r1\"."))
+        end
+        aligned = align_solutions(res)
+        real_results[i] = mark_real(aligned)
+        real_stable_results[i] = mark_real_stable(aligned, ω_val, times, sym, real_results[i])
+    end
+
+    return real_results, real_stable_results
+
+end
 
 #=
 
@@ -402,25 +439,8 @@ plot!(times, x2_over_time, label="Solution 2")
 plot!(times, x3_over_time, label="Solution 3")
 plot!(times, x4_over_time, label="Solution 4")
 
-
-using Plots
-using LaTeXStrings
-ω = 2.0
-r0_val = 0.0
-r1_val = LinRange(0.5, 0.6, 200)
-n = 8
-T = 2π / ω
-times = 0.0:0.05:0.0
-result_length = Vector{Int64}(undef, length(r1_val))
-for i in eachindex(r1_val)
-    result_length[i] = length(find_equilibria_series(n, times, ω, r0_val, r1_val[i])[1])
-end
-
-plot(r1_val, result_length, xlabel=L"r_1", ylabel="# solutions", label="Stable solutions", ylims=(0,18))
-
 =#
 
-## TODO: flag real and stable solutions
 ## TODO: parameter sweeps
 
 
