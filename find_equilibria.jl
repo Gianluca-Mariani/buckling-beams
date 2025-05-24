@@ -11,12 +11,15 @@ is_minimum(Vector{Float64}, Matrix{Expression}, Vector{HomotopyContinuation.Mode
 Returns true if the Hessian matrix is positive definite at the given solution, false otherwise.
 """
 function is_minimum(x_sol::Vector{Float64}, H_evaluated::Matrix{Expression}, q::Vector{HomotopyContinuation.ModelKit.Variable})
-    
+    eps = 1e-1
+
     H_num = evaluate(H_evaluated, q=>x_sol)
     d = diag(H_num)
     e = diag(H_num, 1)
-    H_mat = SymTridiagonal(d, e)  
-    return isposdef(H_mat) # return true if the Hessian is positive definite
+    H_mat = SymTridiagonal(d, e) 
+    lams = eigvals(H_mat)
+    return lams[1] > eps
+    #return isposdef(H_mat) # return true if the Hessian is positive definite
 
 end
 
