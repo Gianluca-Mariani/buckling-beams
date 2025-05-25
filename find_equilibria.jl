@@ -1,4 +1,4 @@
-using HomotopyContinuation, LinearAlgebra, ThreadsX, Munkres
+using HomotopyContinuation, LinearAlgebra, Munkres, ThreadsX
 
 """
 is_minimum(Vector{Float64}, Matrix{Expression}, Vector{HomotopyContinuation.ModelKit.Variable}) -> Boolean
