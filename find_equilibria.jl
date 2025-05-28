@@ -415,6 +415,33 @@ function sweep_one_parameter(n::Int, times::AbstractVector{Float64}, ω_val::Flo
 
 end
 
+
+"""
+sweep_two_parameters(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0s::AbstractVector{Float64}, r1s::AbstractVector{Float64})
+    -> Vector{Vector{Vector{Vector{Boolean}}}}, Vector{Vector{Vector{Vector{Boolean}}}}
+
+Returns two Vector{Vector{..}} where each entry is the real_mask and real_stable_mask returned by `mark_real` and `mark_real_stable`,
+for each pair of values (r0s[i], r1s[j]) value in sweeping
+
+# Arguments
+- `n::Int`: Number of variables in the system (e.g., length of the chain).
+- `times::AbstractVector{Float64}`: A vector of time points over which to evaluate the solution count.
+- `ω_val::Float64`: Angular frequency used in the time-dependent modulation (e.g., in `a = sin(ωt)`).
+- `r0s::AbstractVector{Float64}`: r0s vector to sweep
+- `r1s::AbstractVector{Float64}`: r1s vector to sweep
+
+"""
+function sweep_two_parameters(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0s::AbstractVector{Float64}, r1s::AbstractVector{Float64})
+    real_results = Vector{Vector{Vector{Vector{Bool}}}}(undef, length(r1))
+    real_stable_results = Vector{Vector{Vector{Vector{Bool}}}}(undef, length(r1))
+
+    for i in eachindex(r1s)
+        real_results[i], real_stable_results[i] = sweep_one_parameter(n, times, ω_val, r0s, r1s[i], "r0")
+    end
+
+    return real_results, real_stable_results
+end
+
 #=
 
 omegas = [[[1.0, 1.0], [1.0, 1.0]], [[1.0, 1.0], [1.0, 1.0]],
