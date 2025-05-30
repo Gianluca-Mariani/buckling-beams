@@ -387,9 +387,10 @@ get_solutions_flags(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_
 """
 function get_solutions_flags(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64)
     result, sym = find_equilibria_series(n, times, ω_val, r0_val, r1_val)
-    aligned = align_solutions(result)
+    #aligned = align_solutions(result)
+    aligned = result
     real_result = mark_real(aligned)
-    stablereal_result = mark_real_stable(aligned, ω, times, sym, real_result)
+    stablereal_result = mark_real_stable(aligned, ω_val, times, sym, real_result)
 
     return aligned, real_result, stablereal_result
 end
