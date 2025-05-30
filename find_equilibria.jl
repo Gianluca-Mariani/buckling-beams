@@ -1,3 +1,5 @@
+module FindEquilibria
+
 using HomotopyContinuation, LinearAlgebra, Munkres, ThreadsX
 
 """
@@ -378,6 +380,21 @@ function mark_real_stable(data::Vector{Vector{Vector{ComplexF64}}}, ω_val::Floa
     return real_stable_mask
 end
 
+
+"""
+get_solutions_flags(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64)
+    -> Vector{Vector{Vector{ComplexF64}}}, Vector{Vector{Boolean}}, Vector{Vector{Boolean}}
+"""
+function get_solutions_flags(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64)
+    result, sym = find_equilibria_series(n, times, ω_val, r0_val, r1_val)
+    aligned = align_solutions(result)
+    real_result = mark_real(aligned)
+    stablereal_result = mark_real_stable(aligned, ω, times, sym, real_result)
+
+    return aligned, real_result, stablereal_result
+end
+
+
 """
     sweep_one_parameter(n::Int, times::AbstractVector{Float64}, ω_val::Float64, sweeping::AbstractVector{Float64}, fixed::Float64, sweep_label::String)
         -> Vector{Vector{Vector{Boolean}}}, Vector{Vector{Vector{Boolean}}}
@@ -489,4 +506,7 @@ function parallel_find_equilibria(n::Int, times, ω_matrix, r0_matrix, r1_matrix
     # Reshape back to original shape
     results = reshape(results_vec, size(omega))
     return results
+end
+
+
 end

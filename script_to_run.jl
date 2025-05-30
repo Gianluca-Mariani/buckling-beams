@@ -53,4 +53,5 @@ for i in eachindex(r1)
     end
 end
 
-heatmap(r0, r1, number_stable_real, xlabel=L"r_0", ylabel=L"r_1", colorbar_title="# Stable Solutions")
+heatmap(r0, r1, number_stable_real, xlabel=L"r_0", ylabel=L"r_1", color = cgrad(:turbo, 9, categorical = true), colorbar_title="# Stable Solutions", colorbar_ticks = 2:2:18, clim=(2,18))
+
