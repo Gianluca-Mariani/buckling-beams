@@ -2,6 +2,7 @@
 This script defines classes to simulate the propagation of a soliton along buckling beam arrays with non-dimensional parameters
 """
 
+import numpy as np
 import jax
 import jax.numpy as jnp
 import diffrax as dfx
@@ -9,7 +10,11 @@ from fft_tools import fft_sol_from_grid
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from itertools import product
-import time
+from julia import Julia
+jl = Julia(compiled_modules=False)
+from julia import Main
+Main.include("find_equilibria.jl")
+MyJulia = Main.FindEquilibria
 
 # Base functions for simulating system dynamics
 
@@ -43,6 +48,18 @@ def solve_system(y0, omega, r0, r1, t_cycles=5, N_fact=2000):
         term, solver, t0, t1, ts[1] - ts[0], y0, saveat=saveat, args=(omega, r0, r1)
     )
     return sol
+
+def get_equilibria(n, times, omega, r0, r1):
+    aligned, real_result, stable_real_result = MyJulia.get_solutions_flags(n, times, omega, r0, r1)
+    aligned_np = np.swapaxes(np.array(aligned), 0, 1)
+    real_result_np = np.swapaxes(np.array(real_result), 0, 1)
+    stable_real_result_np = np.swapaxes(np.array(stable_real_result), 0, 1)
+    unstable_real_result_np = real_result_np & ~stable_real_result_np
+    stable_part = [np.real(sol[stable_real_result_np[i]]) for (i, sol) in enumerate(aligned_np)]
+    unstable_part = [np.real(sol[unstable_real_result_np[i]]) for (i, sol) in enumerate(aligned_np)]
+    stable_times = [times[stable_real_result_np[i]] for i in range(len(aligned_np))]
+    unstable_times = [times[unstable_real_result_np[i]] for i in range(len(aligned_np))]
+    return stable_part, unstable_part, stable_times, unstable_times
 
 
 # BeamAnalyzer class: encapsulates the analysis and plotting
@@ -86,13 +103,18 @@ class BeamAnalyzer:
             print(f"Dominant amplitude for x_{i}: {self.dominant_amplitudes[i]:.2f}")
         pass
 
-    def time_series(self, i_array, limits=True):
+    def time_series(self, i_array, equilibria=False, unstable=False, stable_sol = None, unstable_sol = None, stable_time = None, unstable_time = None):
         for i in i_array:
             fig, ax = plt.subplots()
             ax.plot(self.sol_t, self.sol_y[:, i], label="Numerical path")
-            if limits:
-                ax.axhline(y=jnp.sqrt(1 + self.r0), color="r", linestyle="--")
-                ax.axhline(y=jnp.sqrt(1 - self.r0), color="r", linestyle="--")
+            if equilibria:
+                for (j, sol) in enumerate(stable_sol):
+                    if len(sol > 0):
+                        ax.plot(stable_time[j], sol[:,i], marker='o', linestyle='None', markersize=3)
+            if unstable:
+                for (j, sol) in enumerate(unstable_sol):
+                    if len(sol > 0):
+                        ax.plot(unstable_time[j], sol[:,i], marker='o', linestyle='None', markersize=3)
             ax.set_xlabel("t")
             ax.set_ylabel(f"$x_{i}$")
             ax.set_title(
