@@ -10,8 +10,8 @@ from fft_tools import fft_sol_from_grid
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from itertools import product
-from julia import Julia
-jl = Julia(compiled_modules=False)
+#from julia import Julia
+#jl = Julia(compiled_modules=False)
 from julia import Main
 Main.include("find_equilibria.jl")
 MyJulia = Main.FindEquilibria
@@ -114,7 +114,7 @@ class BeamAnalyzer:
             if unstable:
                 for (j, sol) in enumerate(unstable_sol):
                     if len(sol > 0):
-                        ax.plot(unstable_time[j], sol[:,i], marker='o', linestyle='None', markersize=3)
+                        ax.plot(unstable_time[j], sol[:,i], marker='x', linestyle='None', markersize=1)
             ax.set_xlabel("t")
             ax.set_ylabel(f"$x_{i}$")
             ax.set_title(
@@ -123,24 +123,10 @@ class BeamAnalyzer:
             ax.legend()
             ax.grid(True)
 
-    def phase_portrait(self, i1, i2, analytical=True):
+    def phase_portrait(self, i1, i2, equilibria=False, unstable=False, stable_sol = None, unstable_sol = None):
         """Plots phase portraits for solutions"""
         fig, ax = plt.subplots()
-        an_sol = jnp.array(
-            [
-                jnp.zeros(len(self.sol_t)),
-                jnp.sqrt(1 + self.r0 * jnp.sin(self.omega * self.sol_t)),
-                jnp.zeros(len(self.sol_t)),
-                jnp.sqrt(1 - self.r0 * jnp.sin(self.omega * self.sol_t)),
-            ]
-        )
-        ax.plot(
-            an_sol[i1],
-            an_sol[i2],
-            color="r",
-            linestyle="--",
-            label=r"Analytical equilibrium path",
-        )
+       
         ax.plot(self.sol_y[:, i1], self.sol_y[:, i2], label="Numerical path")
 
         ax.set_xlabel(f"$x_{i1}$")
@@ -148,6 +134,17 @@ class BeamAnalyzer:
         ax.set_title(
             rf"Phase portrait on $(x_{i1},x_{i2})$ plane ($\Omega = {float(jnp.round(self.omega, 2)):.2f}$, $r_0 = {float(jnp.round(self.r0, 2)):.2f}$, $r_1 = {float(jnp.round(self.r1, 2)):.2f}$)"
         )
+
+        if equilibria:
+            for (j, sol) in enumerate(stable_sol):
+                if len(sol > 0):
+                    ax.plot(sol[:, i1], sol[:, i2], marker='o', linestyle='None', markersize=3)
+
+        if unstable:
+            for (j, sol) in enumerate(unstable_sol):
+                if len(sol > 0):
+                    ax.plot(sol[:, i1], sol[:, i2], marker='x', linestyle='None', markersize=1)
+
         ax.legend(loc="lower left")
         ax.grid(True)
 

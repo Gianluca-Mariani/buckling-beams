@@ -450,8 +450,8 @@ for each pair of values (r0s[i], r1s[j]) value in sweeping
 
 """
 function sweep_two_parameters(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0s::AbstractVector{Float64}, r1s::AbstractVector{Float64})
-    real_results = Vector{Vector{Vector{Vector{Bool}}}}(undef, length(r1))
-    real_stable_results = Vector{Vector{Vector{Vector{Bool}}}}(undef, length(r1))
+    real_results = Vector{Vector{Vector{Vector{Bool}}}}(undef, length(r1s))
+    real_stable_results = Vector{Vector{Vector{Vector{Bool}}}}(undef, length(r1s))
 
     for i in eachindex(r1s)
         real_results[i], real_stable_results[i] = sweep_one_parameter(n, times, ω_val, r0s, r1s[i], "r0")
