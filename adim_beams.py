@@ -10,6 +10,7 @@ from fft_tools import fft_sol_from_grid
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from itertools import product
+from scipy.stats import special_ortho_group
 #from julia import Julia
 #jl = Julia(compiled_modules=False)
 from julia import Main
@@ -45,21 +46,36 @@ def solve_system(y0, omega, r0, r1, t_cycles=5, N_fact=2000):
     solver = dfx.Tsit5()
     term = dfx.ODETerm(lambda t, y, args: ODEs(t, y, *args))
     sol = dfx.diffeqsolve(
-        term, solver, t0, t1, ts[1] - ts[0], y0, saveat=saveat, args=(omega, r0, r1)
+        term, solver, t0, t1, ts[1] - ts[0], y0, saveat=saveat, args=(omega, r0, r1), max_steps=1_000_000
     )
     return sol
 
-def get_equilibria(n, times, omega, r0, r1):
+def get_equilibria(n, times, omega, r0, r1, numerical_path, rotate=False):
     aligned, real_result, stable_real_result = MyJulia.get_solutions_flags(n, times, omega, r0, r1)
     aligned_np = np.swapaxes(np.array(aligned), 0, 1)
     real_result_np = np.swapaxes(np.array(real_result), 0, 1)
     stable_real_result_np = np.swapaxes(np.array(stable_real_result), 0, 1)
     unstable_real_result_np = real_result_np & ~stable_real_result_np
+    if rotate:
+        aligned_np,  numerical_path = rotate_solutions(n, aligned_np, numerical_path)
     stable_part = [np.real(sol[stable_real_result_np[i]]) for (i, sol) in enumerate(aligned_np)]
     unstable_part = [np.real(sol[unstable_real_result_np[i]]) for (i, sol) in enumerate(aligned_np)]
     stable_times = [times[stable_real_result_np[i]] for i in range(len(aligned_np))]
     unstable_times = [times[unstable_real_result_np[i]] for i in range(len(aligned_np))]
-    return stable_part, unstable_part, stable_times, unstable_times
+    return stable_part, unstable_part, stable_times, unstable_times, numerical_path
+
+def random_rotation_matrix(n):
+    """Generate a random orthogonal (rotation) matrix of size n x n."""
+    return special_ortho_group.rvs(n)
+
+def rotate_solutions(n, aligned_solution, numerical_part):
+    """Rotate all solutions at all times by a random rotation matrix"""
+    
+    R = random_rotation_matrix(n)
+    aligned_solution_rotated = np.einsum('...i,ji->...j', aligned_solution, R)
+    numerical_part_rotated = np.einsum('...i,ji->...j', numerical_part, R)
+
+    return aligned_solution_rotated, numerical_part_rotated
 
 
 # BeamAnalyzer class: encapsulates the analysis and plotting
@@ -114,7 +130,7 @@ class BeamAnalyzer:
             if unstable:
                 for (j, sol) in enumerate(unstable_sol):
                     if len(sol > 0):
-                        ax.plot(unstable_time[j], sol[:,i], marker='x', linestyle='None', markersize=1)
+                        ax.plot(unstable_time[j], sol[:,i], marker='x', linestyle='None', markersize=0.5)
             ax.set_xlabel("t")
             ax.set_ylabel(f"$x_{i}$")
             ax.set_title(
@@ -143,7 +159,7 @@ class BeamAnalyzer:
         if unstable:
             for (j, sol) in enumerate(unstable_sol):
                 if len(sol > 0):
-                    ax.plot(sol[:, i1], sol[:, i2], marker='x', linestyle='None', markersize=1)
+                    ax.plot(sol[:, i1], sol[:, i2], marker='x', linestyle='None', markersize=0.1)
 
         ax.legend(loc="lower left")
         ax.grid(True)
