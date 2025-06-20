@@ -1,8 +1,6 @@
 using Plots
 using LaTeXStrings
-
-include("find_equilibria.jl")
-using .FindEquilibria
+using FindEquilibria
 
 n = 8
 ω = 1.0

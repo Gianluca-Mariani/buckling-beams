@@ -1,0 +1,16 @@
+name = "FindEquilibria"
+uuid = "5d69f3b7-9aab-4dd9-9e46-c91f079c9bc5"
+authors = ["Gianluca Mariani <gianluca.mariani.gm@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+HomotopyContinuation = "f213a82b-91d6-5c5d-acf7-10f1c761b327"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Munkres = "4cefb923-2b6f-58c4-9e65-6821f26b7b51"
+ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
+
+[compat]
+HomotopyContinuation = "2.14.0"
+LinearAlgebra = "1.11.0"
+Munkres = "0.2.0"
+ThreadsX = "0.1.12"

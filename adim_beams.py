@@ -1,7 +1,8 @@
 """
 This script defines classes to simulate the propagation of a soliton along buckling beam arrays with non-dimensional parameters
 """
-
+import os
+os.environ["JULIA_PROJECT"] = "/Users/gmariani/Documents/ETHz - PhD/Scripts/FindEquilibria"
 import numpy as np
 import jax
 import jax.numpy as jnp
@@ -11,11 +12,9 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from itertools import product
 from scipy.stats import special_ortho_group
-#from julia import Julia
-#jl = Julia(compiled_modules=False)
-from julia import Main
-Main.include("find_equilibria.jl")
-MyJulia = Main.FindEquilibria
+from julia import Julia
+jl = Julia()
+from julia import FindEquilibria
 
 # Base functions for simulating system dynamics
 
@@ -51,7 +50,7 @@ def solve_system(y0, omega, r0, r1, t_cycles=5, N_fact=2000):
     return sol
 
 def get_equilibria(n, times, omega, r0, r1, numerical_path, rotate=False):
-    aligned, real_result, stable_real_result = MyJulia.get_solutions_flags(n, times, omega, r0, r1)
+    aligned, real_result, stable_real_result = FindEquilibria.get_solutions_flags(n, times, omega, r0, r1)
     aligned_np = np.swapaxes(np.array(aligned), 0, 1)
     real_result_np = np.swapaxes(np.array(real_result), 0, 1)
     stable_real_result_np = np.swapaxes(np.array(stable_real_result), 0, 1)
