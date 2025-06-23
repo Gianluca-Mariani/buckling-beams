@@ -1,14 +1,19 @@
 using Plots
 using LaTeXStrings
-using FindEquilibria
+#using Pkg
+#Pkg.develop(path="/Users/gmariani/Documents/ETHz - PhD/Scripts/FindEquilibria")
+#Pkg.instantiate()
+#using FindEquilibria
+include("/Users/gmariani/Documents/ETHz - PhD/Scripts/FindEquilibria/src/FindEquilibria.jl")
 
 n = 8
 ω = 1.0
-r0 = 0.0:0.1:0.5
-#r0 = 0.2
-r1 = 0.35:0.1:0.55
+#r0 = 0.0:0.1:0.5
+r0 = 0.2
+#r1 = 0.35:0.1:0.55
+r1 = 0.5
 T = 2π / ω
-times = T/4:0.5:T/4
+times = 0:0.01:T
 
 #=
 result, sym = find_equilibria_series(n, times, ω, r0, r1)
@@ -39,7 +44,7 @@ plt = plot(r0, number_stable_real, xlabel=L"r_0", ylabel="# solutions", label="S
 display(plt)
 
 =#
-
+#=
 real_results, real_stable_results = FindEquilibria.sweep_two_parameters(n, times, ω, r0, r1)
 
 number_real = Array{Int}(undef, length(r1), length(r0))
@@ -53,4 +58,7 @@ for i in eachindex(r1)
 end
 
 heatmap(r0, r1, number_stable_real, xlabel=L"r_0", ylabel=L"r_1", color = cgrad(:turbo, 9, categorical = true), colorbar_title="# Stable Solutions", colorbar_ticks = 2:2:18, clim=(2,18))
+=#
 
+N=10
+FindEquilibria.find_real_equilibria_fast(n, times, ω, r0, r1, N)

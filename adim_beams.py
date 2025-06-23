@@ -49,8 +49,8 @@ def solve_system(y0, omega, r0, r1, t_cycles=5, N_fact=2000):
     )
     return sol
 
-def get_equilibria(n, times, omega, r0, r1, numerical_path, rotate=False):
-    aligned, real_result, stable_real_result = FindEquilibria.get_solutions_flags(n, times, omega, r0, r1)
+def get_equilibria(n, times, omega, r0, r1, numerical_path, rotate=False, fast=True, N=10):
+    aligned, real_result, stable_real_result = FindEquilibria.get_solutions_flags(n, times, omega, r0, r1, fast, N)
     aligned_np = np.swapaxes(np.array(aligned), 0, 1)
     real_result_np = np.swapaxes(np.array(real_result), 0, 1)
     stable_real_result_np = np.swapaxes(np.array(stable_real_result), 0, 1)

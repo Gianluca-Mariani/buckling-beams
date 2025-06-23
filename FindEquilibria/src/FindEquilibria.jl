@@ -114,6 +114,59 @@ function find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::
     return unwrapped_data, (H = H_0, a_sym = a_sym, q = q)
 end
 
+
+function find_real_equilibria_fast(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64; N::Int = 10)
+    # Much to do here still
+    # Initialize variables
+    grad, H, q, r0_sym, r1_sym, a_sym, off_sym = symbolic_potential(n)
+    H_0 = subs(H, r0_sym => r0_val, r1_sym => r1_val, off_sym => 0.0)
+
+    # Make substitutions that need to be done only once
+    grad_0 = subs(grad, r0_sym => r0_val, r1_sym => r1_val)
+    S = System(grad_0; variables = q, parameters = [a_sym, off_sym])
+
+    # Initial solve with complex parameter
+    start_a = randn(ComplexF64)
+    start_off = randn(ComplexF64)
+    start_parameters = [start_a, start_off]
+    result = solve(S; target_parameters = start_parameters, start_system=:total_degree)
+
+    # generate all parameter values
+    sampling_points = range(times[1], times[end], length=N)
+    data_sparse = [[sin(ω_val * sampling_points[i]), 0.0] for i in eachindex(sampling_points)]
+
+    # track p₀ towards the entries of data
+    data_points = solve(
+    S,
+    solutions(result);
+    start_parameters = start_parameters,
+    target_parameters = data_sparse,
+    start_system=:total_degree,
+    transform_result = (r,p) -> results(r; only_finite = false, multiple_results = true)
+    )
+    unwrapped_data = [[result.solution for result in data_point] for data_point in data_points]
+
+    n_times = size(unwrapped_data)[1]
+    n_solutions = size(unwrapped_data[1])[1]
+    flag_real = [any(is_solution_real(vec(unwrapped_data[t][s])) for t in 1:n_times)
+          for s in 1:n_solutions]
+
+    data_full = [[sin(ω_val * times[i]), 0.0] for i in eachindex(times)]
+    
+    final_data_points = solve(
+    S,
+    solutions(result[flag_real]);
+    start_parameters = start_parameters,
+    target_parameters = data_full,
+    start_system=:total_degree,
+    transform_result = (r,p) -> results(r; only_finite = false, multiple_results = true))
+
+    unwrapped_data_final = [[result.solution for result in data_point] for data_point in final_data_points]
+
+    return unwrapped_data_final, (H = H_0, a_sym = a_sym, q = q)
+    
+end
+
 """
 generate_combinations(n::Int, z::Vector{ComplexF64}) -> Vector{Vector{ComplexF64}}
 
@@ -385,14 +438,18 @@ end
 get_solutions_flags(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64)
     -> Vector{Vector{Vector{ComplexF64}}}, Vector{Vector{Boolean}}, Vector{Vector{Boolean}}
 """
-function get_solutions_flags(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64)
-    result, sym = find_equilibria_series(n, times, ω_val, r0_val, r1_val)
-    #aligned = align_solutions(result)
-    aligned = result
-    real_result = mark_real(aligned)
-    stablereal_result = mark_real_stable(aligned, ω_val, times, sym, real_result)
+function get_solutions_flags(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64, fast::Bool = false, N::Int = 10)
+    local result, sym
+    
+    if fast
+        result, sym = find_real_equilibria_fast(n, times, ω_val, r0_val, r1_val; N)
+    else
+        result, sym = find_equilibria_series(n, times, ω_val, r0_val, r1_val)
+    end
+    real_result = mark_real(result)
+    stablereal_result = mark_real_stable(result, ω_val, times, sym, real_result)
 
-    return aligned, real_result, stablereal_result
+    return result, real_result, stablereal_result
 end
 
 
