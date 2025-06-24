@@ -58,7 +58,7 @@ for i in eachindex(r1)
 end
 
 heatmap(r0, r1, number_stable_real, xlabel=L"r_0", ylabel=L"r_1", color = cgrad(:turbo, 9, categorical = true), colorbar_title="# Stable Solutions", colorbar_ticks = 2:2:18, clim=(2,18))
-=#
 
+=#
 N=10
-FindEquilibria.find_real_equilibria_fast(n, times, ω, r0, r1, N)
+FindEquilibria.find_real_equilibria_fast(n, times, ω, r0, r1; N)

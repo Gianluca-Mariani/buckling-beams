@@ -1,6 +1,3 @@
-import time
-
-start_time = time.time()
 import jax.numpy as jnp
 import numpy as np
 from adim_beams import BeamAnalyzer, AdimBeamSystemArray, get_equilibria
@@ -8,8 +5,6 @@ from adim_beams import solve_system, A_vs_Omega
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
-end_time = time.time()
-print(f"Time to import libraries (including Julia):  {end_time - start_time}")
 
 '''
 from julia import Main
@@ -78,15 +73,15 @@ y0b = jnp.concatenate([y00, y01, y02, y03, y04, y05, y06, y07])
 #y0b = jnp.concatenate([y00, y01, y02, y03])
 y0 = jnp.tile(y0b, n)
 
-omega = 0.1
+omega = 0.01
 r0=0.4
-r1=0.5 
+r1=0.5
+t_cycles = 6
+N_fact = 1000
+N=30
 
-start_time = time.time()
-test_sol = solve_system(y0, omega=omega, r0=r0, r1=r1, t_cycles=1, N_fact=6000)
-end_time = time.time()
-print(f"Time to integrate ODEs:  {end_time - start_time}")
-stable_part_rotated, unstable_part_rotated, stable_times, unstable_times, numerical_rotated = get_equilibria(len(y0), np.array(test_sol.ts, dtype=np.float64), omega, r0, r1, test_sol.ys, rotate=False, fast=True, N=100)
+test_sol = solve_system(y0, omega=omega, r0=r0, r1=r1, t_cycles=t_cycles, N_fact=N_fact)
+stable_part_rotated, unstable_part_rotated, stable_times, unstable_times, numerical_rotated = get_equilibria(len(y0), t_cycles, N_fact, omega, r0, r1, test_sol.ys, rotate=False, fast=True, N=N)
 test_analyzer = BeamAnalyzer(test_sol.ts, numerical_rotated, omega=omega, r0=r0, r1=r1)
 test_analyzer.time_series([0, 1, 2, 3, 4, 5, 6, 7], equilibria=True, unstable=False, stable_sol = stable_part_rotated, unstable_sol = unstable_part_rotated, stable_time = stable_times, unstable_time = unstable_times)
 test_analyzer.phase_portrait(0, 1, equilibria=True, unstable=False, stable_sol = stable_part_rotated, unstable_sol = unstable_part_rotated)

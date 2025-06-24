@@ -37,10 +37,10 @@ def ODEs(t, q, omega, r0, r1):
     return jax.grad(lagrangian, argnums=0)(q, t, omega, r0, r1)
 
 
-def solve_system(y0, omega, r0, r1, t_cycles=5, N_fact=2000):
+def solve_system(y0, omega, r0, r1, t_cycles=3, N_fact=1000):
     t0 = 0.0
     t1 = t_cycles * 2 * jnp.pi / omega
-    ts = jnp.linspace(t0, t1, N_fact)
+    ts = jnp.linspace(t0, t1, t_cycles * N_fact, endpoint=False)
     saveat = dfx.SaveAt(ts=ts)
     solver = dfx.Tsit5()
     term = dfx.ODETerm(lambda t, y, args: ODEs(t, y, *args))
@@ -49,18 +49,38 @@ def solve_system(y0, omega, r0, r1, t_cycles=5, N_fact=2000):
     )
     return sol
 
-def get_equilibria(n, times, omega, r0, r1, numerical_path, rotate=False, fast=True, N=10):
-    aligned, real_result, stable_real_result = FindEquilibria.get_solutions_flags(n, times, omega, r0, r1, fast, N)
+def get_equilibria(n, t_cycles, N_fact, omega, r0, r1, numerical_path, rotate=False, fast=True, N=10):
+    # Initialize the time arrays
+    T = 2 * np.pi / omega
+    times_local = np.linspace(0, T, N_fact, endpoint=False)
+    times = np.vstack([times_local + i * T for i in range(t_cycles)]).flatten()
+
+    # Call homotopy
+    aligned, real_result, stable_real_result = FindEquilibria.get_solutions_flags(n, times_local, omega, r0, r1, fast, N)
+
+    # Tile results
+    aligned = np.tile(aligned, (t_cycles, 1, 1))
+    real_result = np.tile(real_result, (t_cycles, 1))
+    stable_real_result = np.tile(stable_real_result, (t_cycles, 1))
+    
+    # Swap axes
     aligned_np = np.swapaxes(np.array(aligned), 0, 1)
     real_result_np = np.swapaxes(np.array(real_result), 0, 1)
     stable_real_result_np = np.swapaxes(np.array(stable_real_result), 0, 1)
+
+    # Creates the unstable boolean vector
     unstable_real_result_np = real_result_np & ~stable_real_result_np
+    
     if rotate:
+        # Performs a random rotation on the solution vector
         aligned_np,  numerical_path = rotate_solutions(n, aligned_np, numerical_path)
+    
+    # Gets real, stable and unstable parts of solutions
     stable_part = [np.real(sol[stable_real_result_np[i]]) for (i, sol) in enumerate(aligned_np)]
     unstable_part = [np.real(sol[unstable_real_result_np[i]]) for (i, sol) in enumerate(aligned_np)]
     stable_times = [times[stable_real_result_np[i]] for i in range(len(aligned_np))]
     unstable_times = [times[unstable_real_result_np[i]] for i in range(len(aligned_np))]
+
     return stable_part, unstable_part, stable_times, unstable_times, numerical_path
 
 def random_rotation_matrix(n):
