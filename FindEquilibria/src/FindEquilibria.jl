@@ -1,9 +1,9 @@
 module FindEquilibria
 
-using HomotopyContinuation, LinearAlgebra, Munkres, ThreadsX
+using HomotopyContinuation, LinearAlgebra, CriticalTransitions, DynamicalSystems, Symbolics, Munkres, ThreadsX
 
 """
-is_minimum(Vector{Float64}, Matrix{Expression}, Vector{HomotopyContinuation.ModelKit.Variable}) -> Boolean
+is_minimum(Vector{Float64}, Matrix{Expression}, Vector{HomotopyContinuation.ModelKit.Variable}) -> Bool
 
 # Arguments
 - `x_sol::Vector{Float64}`: The numerical solution where the Hessian is to be evaluated.
@@ -111,7 +111,7 @@ function find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::
     transform_result = (r,p) -> results(r; only_finite = false, multiple_results = true)
     )
     unwrapped_data = [[result.solution for result in data_point] for data_point in data_points]
-    return unwrapped_data, (H = H_0, a_sym = a_sym, q = q)
+    return unwrapped_data, (H = H_0, a_sym = a_sym, q = q, grad_1 = subs(grad_0, off_sym => 0))
 end
 
 
@@ -163,7 +163,7 @@ function find_real_equilibria_fast(n::Int, times::AbstractVector{Float64}, ω_va
 
     unwrapped_data_final = [[result.solution for result in data_point] for data_point in final_data_points]
 
-    return unwrapped_data_final, (H = H_0, a_sym = a_sym, q = q)
+    return unwrapped_data_final, (H = H_0, a_sym = a_sym, q = q, grad_1 = subs(grad_0, off_sym => 0))
     
 end
 
@@ -438,7 +438,7 @@ end
 get_solutions_flags(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64)
     -> Vector{Vector{Vector{ComplexF64}}}, Vector{Vector{Boolean}}, Vector{Vector{Boolean}}
 """
-function get_solutions_flags(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64, fast::Bool = false, N::Int = 10)
+function get_solutions_flags(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64, fast::Bool = true, N::Int = 10)
     local result, sym
     
     if fast
@@ -449,9 +449,37 @@ function get_solutions_flags(n::Int, times::AbstractVector{Float64}, ω_val::Flo
     real_result = mark_real(result)
     stablereal_result = mark_real_stable(result, ω_val, times, sym, real_result)
 
-    return result, real_result, stablereal_result
+    actions = get_action(result, stablereal_result, times, sym, ω_val)
+
+    return result, real_result, stablereal_result, actions
 end
 
+
+
+function get_action(result::Vector{Vector{Vector{ComplexF64}}}, stablereal_result::Vector{Vector{Bool}}, times::AbstractVector{Float64}, sym, ω_val::Float64)
+
+    function grad_action(u, p, t)
+        return evaluate(sym.grad_1, sym.q => u, sym.a_sym => p[1])
+    end
+
+    n = length(sym.q)
+    x0 = randn(n)
+
+    actions = zeros(length(times))
+
+    a_values = [sin(ω_val*t) for t in times]
+
+    for (i, a) in enumerate(a_values)
+        x_i = real(result[i][1])
+        x_f = real(result[i][2])
+        sde = CoupledSDEs(grad_action, x0, [a]; noise_strength = 0.05)
+        pathStruct = geometric_min_action_method(sde, x_i, x_f; N=10)
+        actions[i] = pathStruct.action
+    end
+
+    return actions
+    
+end
 
 """
     sweep_one_parameter(n::Int, times::AbstractVector{Float64}, ω_val::Float64, sweeping::AbstractVector{Float64}, fixed::Float64, sweep_label::String)
