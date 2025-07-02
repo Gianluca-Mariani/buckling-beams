@@ -4,13 +4,15 @@ authors = ["Gianluca Mariani <gianluca.mariani.gm@gmail.com>"]
 version = "0.1.0"
 
 [deps]
+CriticalTransitions = "251e6cd3-3112-48a5-99dd-66efcfd18334"
+DynamicalSystems = "61744808-ddfa-5f27-97ff-6e42cc95d634"
 HomotopyContinuation = "f213a82b-91d6-5c5d-acf7-10f1c761b327"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-Munkres = "4cefb923-2b6f-58c4-9e65-6821f26b7b51"
 ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
 [compat]
+CriticalTransitions = "0.6.0"
+DynamicalSystems = "3.4.2"
 HomotopyContinuation = "2.14.0"
 LinearAlgebra = "1.11.0"
-Munkres = "0.2.0"
 ThreadsX = "0.1.12"

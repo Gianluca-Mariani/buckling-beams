@@ -1,6 +1,6 @@
 module FindEquilibria
 
-using HomotopyContinuation, LinearAlgebra, CriticalTransitions, DynamicalSystems, Symbolics, ThreadsX
+using HomotopyContinuation, LinearAlgebra, CriticalTransitions, DynamicalSystems, ThreadsX
 
 struct RealSolution
     realStable::Matrix{Float64}
@@ -21,17 +21,13 @@ is_minimum(Vector{Float64}, Matrix{Expression}, Vector{HomotopyContinuation.Mode
 
 Returns true if the Hessian matrix is positive definite at the given solution, false otherwise.
 """
-function is_minimum(x_sol::Vector{Float64}, H_evaluated::Matrix{Expression}, q::Vector{HomotopyContinuation.ModelKit.Variable})
-    eps = 1e-1
-
+function is_minimum(x_sol::Vector{Float64}, H_evaluated::Matrix{Expression}, q::Vector{HomotopyContinuation.ModelKit.Variable}; eps=1e-1)
     H_num = evaluate(H_evaluated, q=>x_sol)
     d = diag(H_num)
     e = diag(H_num, 1)
     H_mat = SymTridiagonal(d, e) 
     lams = eigvals(H_mat)
     return lams[1] > eps
-    #return isposdef(H_mat) # return true if the Hessian is positive definite
-
 end
 
 """
@@ -92,88 +88,79 @@ Tracks equilibria of a symbolic potential system as a function of time-varying p
 Requires a symbolic differentiation library such as `Symbolics.jl`, and a solver package capable of homotopy continuation (e.g., `HomotopyContinuation.jl`).
 
 """
-function find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64)
-    # Initialize variables
-    grad, H, q, r0_sym, r1_sym, a_sym, off_sym = symbolic_potential(n)
-    H_0 = subs(H, r0_sym => r0_val, r1_sym => r1_val, off_sym => 0.0)
-
-    # Make substitutions that need to be done only once
-    grad_0 = subs(grad, r0_sym => r0_val, r1_sym => r1_val)
-    S = System(grad_0; variables = q, parameters = [a_sym, off_sym])
-
-    # Initial solve with complex parameter
-    start_a = randn(ComplexF64)
-    start_off = randn(ComplexF64)
-    start_parameters = [start_a, start_off]
-    result = solve(S; target_parameters = start_parameters, start_system=:total_degree)
-
-    # generate all parameter values
-    data = [[sin(ω_val * times[i]), 0.0] for i in eachindex(times)]
-
-    # track p₀ towards the entries of data
-    data_points = solve(
-    S,
-    solutions(result);
-    start_parameters = start_parameters,
-    target_parameters = data,
-    start_system=:total_degree,
-    transform_result = (r,p) -> results(r; only_finite = false, multiple_results = true)
-    )
-    unwrapped_data = [[result.solution for result in data_point] for data_point in data_points]
-    return unwrapped_data, (H = H_0, a_sym = a_sym, q = q, grad_1 = subs(grad_0, off_sym => 0))
-end
-
-
-function find_real_equilibria_fast(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64; N::Int = 10)
-    # Much to do here still
-    # Initialize variables
-    grad, H, q, r0_sym, r1_sym, a_sym, off_sym = symbolic_potential(n)
-    H_0 = subs(H, r0_sym => r0_val, r1_sym => r1_val, off_sym => 0.0)
-
-    # Make substitutions that need to be done only once
-    grad_0 = subs(grad, r0_sym => r0_val, r1_sym => r1_val)
-    S = System(grad_0; variables = q, parameters = [a_sym, off_sym])
-
-    # Initial solve with complex parameter
-    start_a = randn(ComplexF64)
-    start_off = randn(ComplexF64)
-    start_parameters = [start_a, start_off]
-    result = solve(S; target_parameters = start_parameters, start_system=:total_degree)
-
-    # generate all parameter values
-    sampling_points = range(times[1], times[end], length=N)
-    data_sparse = [[sin(ω_val * sampling_points[i]), 0.0] for i in eachindex(sampling_points)]
-
-    # track p₀ towards the entries of data
-    data_points = solve(
-    S,
-    solutions(result);
-    start_parameters = start_parameters,
-    target_parameters = data_sparse,
-    start_system=:total_degree,
-    transform_result = (r,p) -> results(r; only_finite = false, multiple_results = true)
-    )
-    unwrapped_data = [[result.solution for result in data_point] for data_point in data_points]
-
-    n_times = size(unwrapped_data)[1]
-    n_solutions = size(unwrapped_data[1])[1]
-    flag_real = [any(is_solution_real(vec(unwrapped_data[t][s])) for t in 1:n_times)
-          for s in 1:n_solutions]
-
-    data_full = [[sin(ω_val * times[i]), 0.0] for i in eachindex(times)]
+function find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64; fast::Bool=true, N::Int = 20)
+    N_times = length(times)
     
-    final_data_points = solve(
+    # Initialize variables
+    grad, H, q, r0_sym, r1_sym, a_sym, off_sym = symbolic_potential(n)
+
+    # Make substitutions that need to be done only once
+    grad_0 = subs(grad, r0_sym => r0_val, r1_sym => r1_val)
+    H_0 = subs(H, r0_sym => r0_val, r1_sym => r1_val, off_sym => 0.0)
+    S = System(grad_0; variables = q, parameters = [a_sym, off_sym])
+
+    # Initial solve with complex random parameter
+    start_parameters = [randn(ComplexF64), randn(ComplexF64)]
+    result = solve(S; target_parameters = start_parameters, start_system=:total_degree)
+    N_sol = length(result)
+    N_fast_sol = N_sol
+
+    # Fast algorithm only keeps solutions in result that are at least once real in a sparse time scan
+    if fast
+        sampling_points = range(times[1], times[end], length=N) # Define a 
+        data_sparse = Vector{Vector{Float64}}(undef, N)
+        for (i, t) in enumerate(sampling_points)
+            data_sparse[i] = [sin(ω_val * t), 0.0]
+        end
+
+        # track p₀ towards the entries of data_sparse
+        data_points_fast = solve(
+        S,
+        solutions(result);
+        start_parameters = start_parameters,
+        target_parameters = data_sparse,
+        start_system=:total_degree,
+        transform_result = (r,p) -> results(r; only_finite = false, multiple_results = true)
+        )
+
+        flag_real = falses(N_sol)
+        for j in 1:N_sol
+            for i in 1:N
+                if is_solution_real((data_points_fast[i][j]).solution)
+                    flag_real[j] = true
+                    break
+                end
+            end
+        end
+        N_fast_sol = sum(flag_real)
+        result = result[flag_real]
+    end
+
+    # generate all parameter values for dense time sweep
+    data_full = Vector{Vector{Float64}}(undef, N_times)
+    for (i, t) in enumerate(times)
+        data_full[i] = [sin(ω_val * t), 0.0]
+    end
+
+    # track p₀ towards the entries of data_full
+    data_points_full = solve(
     S,
-    solutions(result[flag_real]);
+    solutions(result);
     start_parameters = start_parameters,
     target_parameters = data_full,
     start_system=:total_degree,
-    transform_result = (r,p) -> results(r; only_finite = false, multiple_results = true))
+    transform_result = (r,p) -> results(r; only_finite = false, multiple_results = true)
+    )
 
-    unwrapped_data_final = [[result.solution for result in data_point] for data_point in final_data_points]
-
-    return unwrapped_data_final, (H = H_0, a_sym = a_sym, q = q, grad_1 = subs(grad_0, off_sym => 0))
+    all_solutions = Array{ComplexF64}(undef, N_fast_sol, N_times, n)
+    for j in 1:N_fast_sol
+            for i in 1:N_times
+                all_solutions[j, i, :] = (data_points_full[i][j]).solution
+            end
+        end
     
+    #unwrapped_data = [[result.solution for result in data_point] for data_point in data_points]
+    return all_solutions, (H = H_0, a_sym = a_sym, q = q, grad_1 = subs(grad_0, off_sym => 0))
 end
 
 
@@ -206,8 +193,15 @@ Maps each vector solution in the input vector to a boolean value, which is true 
 # Description
 Returns true for each solution if the solution is real, false otherwise
 """
-function mark_real(data::Vector{Vector{Vector{ComplexF64}}}; tol::Float64 = 1e-6)
-    real_mask = [[is_solution_real(solution; tol) for solution in time_step] for time_step in data]
+function mark_real(data::Array{ComplexF64, 3}; tol::Float64 = 1e-6)
+    #real_mask = [[is_solution_real(solution; tol) for solution in time_step] for time_step in data]
+    N_sol, N_times, _ = size(data)
+    real_mask = Array{Bool}(undef, N_sol, N_times)
+    for i in 1:N_sol
+        for j in 1:N_times
+            real_mask[i, j] = is_solution_real(data[i, j, :]; tol)
+        end
+    end
     return real_mask
 end
 
@@ -227,15 +221,16 @@ Maps each vector solution in the input vector to a boolean value, which is true 
 # Description
 Returns true for each solution if the solution is real, false otherwise
 """
-function mark_real_stable(data::Vector{Vector{Vector{ComplexF64}}}, ω_val::Float64, times::AbstractVector{Float64}, sym::NamedTuple, real_mask::Vector{Vector{Bool}})
-    real_stable_mask = deepcopy(real_mask)
-    for (i, time) in enumerate(times)
-        H_time = subs(sym.H, sym.a_sym => sin(ω_val * time))
-        for (j, sol) in enumerate(data[i])
-            if real_mask[i][j]
-                real_stable_mask[i][j] = is_minimum(real(sol), H_time, sym.q)
+function mark_real_stable(data::Array{ComplexF64, 3}, ω_val::Float64, times::AbstractVector{Float64}, sym::NamedTuple, real_mask::Array{Bool, 2}; eps::Float64 = 1e-1)
+    N_sol, N_times = size(real_mask)
+    real_stable_mask = Array{ComplexF64, 2}(undef, N_sol, N_times)
+    for j in 1:N_times
+        H_time = subs(sym.H, sym.a_sym => sin(ω_val * times[j]))
+        for i in 1:N_sol
+            if real_mask[i, j]
+                real_stable_mask[i, j] = is_minimum(real(data[i, j, :]), H_time, sym.q; eps)
             else
-                real_stable_mask[i][j] = false
+                real_stable_mask[i, j] = false
             end
         end
     end
@@ -248,24 +243,19 @@ get_solutions_flags(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_
     -> Vector{Vector{Vector{ComplexF64}}}, Vector{Vector{Boolean}}, Vector{Vector{Boolean}}
 """
 function get_solutions_flags(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64, fast::Bool = true, N::Int = 10)
-    local result, sym
     
-    if fast
-        result, sym = find_real_equilibria_fast(n, times, ω_val, r0_val, r1_val; N)
-    else
-        result, sym = find_equilibria_series(n, times, ω_val, r0_val, r1_val)
-    end
+    result, sym = find_equilibria_series(n, times, ω_val, r0_val, r1_val; fast, N)
     real_result = mark_real(result)
     stablereal_result = mark_real_stable(result, ω_val, times, sym, real_result)
 
-    actions = get_action(result, stablereal_result, times, sym, ω_val)
+    #actions = get_action(result, stablereal_result, times, sym, ω_val)
 
-    return result, real_result, stablereal_result, actions
+    return result, real_result, stablereal_result#, actions
 end
 
 
 
-function get_action(result::Vector{Vector{Vector{ComplexF64}}}, stablereal_result::Vector{Vector{Bool}}, times::AbstractVector{Float64}, sym, ω_val::Float64)
+function get_action(result::Vector{Vector{Vector{ComplexF64}}}, stablereal_result::Vector{Vector{Bool}}, times::AbstractVector{Float64}, sym::NamedTuple, ω_val::Float64)
 
     function grad_action(u, p, t)
         return evaluate(sym.grad_1, sym.q => u, sym.a_sym => p[1])

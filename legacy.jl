@@ -202,3 +202,58 @@ function get_number_of_solutions(n::Int, time::Float64, ω_val::Float64, r0_val:
     end
     return num_sol
 end
+
+
+
+
+function find_real_equilibria_fast(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64; N::Int = 10)
+    # Much to do here still
+    # Initialize variables
+    grad, H, q, r0_sym, r1_sym, a_sym, off_sym = symbolic_potential(n)
+    H_0 = subs(H, r0_sym => r0_val, r1_sym => r1_val, off_sym => 0.0)
+
+    # Make substitutions that need to be done only once
+    grad_0 = subs(grad, r0_sym => r0_val, r1_sym => r1_val)
+    S = System(grad_0; variables = q, parameters = [a_sym, off_sym])
+
+    # Initial solve with complex parameter
+    start_a = randn(ComplexF64)
+    start_off = randn(ComplexF64)
+    start_parameters = [start_a, start_off]
+    result = solve(S; target_parameters = start_parameters, start_system=:total_degree)
+
+    # generate all parameter values
+    sampling_points = range(times[1], times[end], length=N)
+    data_sparse = [[sin(ω_val * sampling_points[i]), 0.0] for i in eachindex(sampling_points)]
+
+    # track p₀ towards the entries of data
+    data_points = solve(
+    S,
+    solutions(result);
+    start_parameters = start_parameters,
+    target_parameters = data_sparse,
+    start_system=:total_degree,
+    transform_result = (r,p) -> results(r; only_finite = false, multiple_results = true)
+    )
+    unwrapped_data = [[result.solution for result in data_point] for data_point in data_points]
+
+    n_times = size(unwrapped_data)[1]
+    n_solutions = size(unwrapped_data[1])[1]
+    flag_real = [any(is_solution_real(vec(unwrapped_data[t][s])) for t in 1:n_times)
+          for s in 1:n_solutions]
+
+    data_full = [[sin(ω_val * times[i]), 0.0] for i in eachindex(times)]
+    
+    final_data_points = solve(
+    S,
+    solutions(result[flag_real]);
+    start_parameters = start_parameters,
+    target_parameters = data_full,
+    start_system=:total_degree,
+    transform_result = (r,p) -> results(r; only_finite = false, multiple_results = true))
+
+    unwrapped_data_final = [[result.solution for result in data_point] for data_point in final_data_points]
+
+    return unwrapped_data_final, (H = H_0, a_sym = a_sym, q = q, grad_1 = subs(grad_0, off_sym => 0))
+    
+end
