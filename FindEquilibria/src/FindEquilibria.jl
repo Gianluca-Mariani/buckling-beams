@@ -2,6 +2,15 @@ module FindEquilibria
 
 using HomotopyContinuation, LinearAlgebra, CriticalTransitions, DynamicalSystems, Symbolics, Munkres, ThreadsX
 
+struct RealSolution
+    realStable::Matrix{Float64}
+    realUnstable::Matrix{Float64}
+    timesStable::Vector{Float64}
+    timesUnstable::Vector{Float64}
+    transitionActions::Vector{Vector{Tuple{Int, Float64}}}
+end
+
+
 """
 is_minimum(Vector{Float64}, Matrix{Expression}, Vector{HomotopyContinuation.ModelKit.Variable}) -> Bool
 
