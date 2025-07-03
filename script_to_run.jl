@@ -91,12 +91,12 @@ println(pathStruct.action)
 
 
 
-n = 8
+n = 4
 ω = 1.0
 #r0 = 0.0:0.01:0.5
 r0 = 0.4
 #r1 = 0.35:0.01:0.55
-r1 = 0.5
+r1 = 0.3
 T = 2π / ω
 times = 0.0:0.01:T
 
@@ -106,11 +106,16 @@ times = 0.0:0.01:T
 
 allStructs = FindEquilibria.create_structs(n, times, ω, r0, r1; fast = true, N=30)
 
-p = plot(xlabel=L"t", ylabel=L"x_0(t)", legend = false)
+p = plot(xlabel=L"t", ylabel=L"x_0(t)", legend = true)
 
 for str in allStructs
-    plot!(p, str.timesStable, str.realStable[:, 1], seriestype = :scatter, markerstrokewidth = 0)
-    plot!(p, str.timesUnstable, str.realUnstable[:, 1], seriestype = :scatter, markerstrokewidth = 0, markersize = 1)
+    if (size(str.timesStable)[1] > 0)
+        plot!(p, str.timesStable, str.realStable[:, 1], seriestype = :scatter, markerstrokewidth = 0)
+    end
+    if (size(str.timesUnstable)[1] > 0)
+        #plot!(p, str.timesUnstable, str.realUnstable[:, 1], seriestype = :scatter, markerstrokewidth = 0, markersize = 1)
+    end
+    #plot!(p, str.timesUnstable, str.realUnstable[:, 1], seriestype = :scatter, markerstrokewidth = 0, markersize = 1)
 end
 
 display(p)

@@ -7,7 +7,8 @@ using HomotopyContinuation, LinearAlgebra, CriticalTransitions, DynamicalSystems
     realUnstable::Matrix{Float64}
     timesStable::Vector{Float64}
     timesUnstable::Vector{Float64}
-    #transitionActions::Vector{Vector{Tuple{Int, Float64}}}
+    maskStable::Vector{Bool}
+    transitionActions::Vector{Vector{Tuple{Int, Float64}}}
 end
 
 
@@ -91,6 +92,8 @@ Requires a symbolic differentiation library such as `Symbolics.jl`, and a solver
 function find_equilibria_series(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64; fast::Bool=true, N::Int = 20)
     N_times = length(times)
     
+    # TODO: Try fixing random seed
+
     # Initialize variables
     grad, H, q, r0_sym, r1_sym, a_sym, off_sym = symbolic_potential(n)
 
@@ -294,12 +297,14 @@ function create_structs(n::Int, times::AbstractVector{Float64}, ω_val::Float64,
         in2 = real(result[i, unstablereal_result[i, :], :])
         in3 = times[stablereal_result[i, :]]
         in4 = times[unstablereal_result[i, :]]
-        sol_struct_array[i] = RealSolution(realStable = in1, realUnstable = in2, timesStable = in3, timesUnstable = in4)
+        sol_struct_array[i] = RealSolution(realStable = in1, realUnstable = in2, timesStable = in3, timesUnstable = in4, maskStable = stablereal_result[i, :], transitionActions = Vector{Vector{Tuple{Int, Float64}}}())
+    end
+
+    for i in 1:N_sol
+        
     end
 
     return sol_struct_array
-
-    #actions = get_action(result, stablereal_result, times, sym, ω_val)
 end
 
 """
