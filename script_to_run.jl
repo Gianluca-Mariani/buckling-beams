@@ -91,13 +91,27 @@ println(pathStruct.action)
 
 
 
-n = 4
+n = 8
 ω = 1.0
 #r0 = 0.0:0.01:0.5
-r0 = 0.3
+r0 = 0.4
 #r1 = 0.35:0.01:0.55
 r1 = 0.5
 T = 2π / ω
-times = 0.0:0.1:T
+times = 0.0:0.01:T
 
-FindEquilibria.get_solutions_flags(n, times, ω, r0, r1)
+#FindEquilibria.get_solutions_flags(n, times, ω, r0, r1)
+
+#sol, h = FindEquilibria.find_equilibria_series(n, times, ω, r0, r1; fast = true, N=30)
+
+allStructs = FindEquilibria.create_structs(n, times, ω, r0, r1; fast = true, N=30)
+
+p = plot(xlabel=L"t", ylabel=L"x_0(t)", legend = false)
+
+for str in allStructs
+    plot!(p, str.timesStable, str.realStable[:, 1], seriestype = :scatter, markerstrokewidth = 0)
+    plot!(p, str.timesUnstable, str.realUnstable[:, 1], seriestype = :scatter, markerstrokewidth = 0, markersize = 1)
+end
+
+display(p)
+#println(size(sol))

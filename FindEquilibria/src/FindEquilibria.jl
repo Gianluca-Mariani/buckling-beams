@@ -2,12 +2,12 @@ module FindEquilibria
 
 using HomotopyContinuation, LinearAlgebra, CriticalTransitions, DynamicalSystems, ThreadsX
 
-struct RealSolution
+@kwdef mutable struct RealSolution
     realStable::Matrix{Float64}
     realUnstable::Matrix{Float64}
     timesStable::Vector{Float64}
     timesUnstable::Vector{Float64}
-    transitionActions::Vector{Vector{Tuple{Int, Float64}}}
+    #transitionActions::Vector{Vector{Tuple{Int, Float64}}}
 end
 
 
@@ -223,7 +223,7 @@ Returns true for each solution if the solution is real, false otherwise
 """
 function mark_real_stable(data::Array{ComplexF64, 3}, ω_val::Float64, times::AbstractVector{Float64}, sym::NamedTuple, real_mask::Array{Bool, 2}; eps::Float64 = 1e-1)
     N_sol, N_times = size(real_mask)
-    real_stable_mask = Array{ComplexF64, 2}(undef, N_sol, N_times)
+    real_stable_mask = Array{Bool, 2}(undef, N_sol, N_times)
     for j in 1:N_times
         H_time = subs(sym.H, sym.a_sym => sin(ω_val * times[j]))
         for i in 1:N_sol
@@ -278,6 +278,28 @@ function get_action(result::Vector{Vector{Vector{ComplexF64}}}, stablereal_resul
 
     return actions
     
+end
+
+function create_structs(n::Int, times::AbstractVector{Float64}, ω_val::Float64, r0_val::Float64, r1_val::Float64; fast::Bool = true, N::Int = 10)
+    result, sym = find_equilibria_series(n, times, ω_val, r0_val, r1_val; fast, N)
+    real_result = mark_real(result)
+    stablereal_result = mark_real_stable(result, ω_val, times, sym, real_result)
+    unstablereal_result = real_result .&& .!stablereal_result
+
+    N_sol, _, _ = size(result)
+    sol_struct_array = Vector{RealSolution}(undef, N_sol)
+
+    for i in 1:N_sol
+        in1 = real(result[i, stablereal_result[i, :], :])
+        in2 = real(result[i, unstablereal_result[i, :], :])
+        in3 = times[stablereal_result[i, :]]
+        in4 = times[unstablereal_result[i, :]]
+        sol_struct_array[i] = RealSolution(realStable = in1, realUnstable = in2, timesStable = in3, timesUnstable = in4)
+    end
+
+    return sol_struct_array
+
+    #actions = get_action(result, stablereal_result, times, sym, ω_val)
 end
 
 """

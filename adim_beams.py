@@ -59,18 +59,9 @@ def get_equilibria(n, t_cycles, N_fact, omega, r0, r1, numerical_path, rotate=Fa
     aligned, real_result, stable_real_result = FindEquilibria.get_solutions_flags(n, times_local, omega, r0, r1, fast, N)
 
     # Tile results
-    aligned = np.tile(aligned, (t_cycles, 1, 1))
-    real_result = np.tile(real_result, (t_cycles, 1)).real.astype(bool)
-    stable_real_result = np.tile(stable_real_result, (t_cycles, 1)).real.astype(bool)
-    print(type(stable_real_result))
-    
-    # Swap axes
-    #aligned_np = np.swapaxes(np.array(aligned), 0, 1)
-    #real_result_np = np.swapaxes(np.array(real_result), 0, 1)
-    #stable_real_result_np = np.swapaxes(np.array(stable_real_result), 0, 1)
-
-    real_result_np = real_result
-    stable_real_result_np = stable_real_result
+    aligned_np = np.tile(aligned, (1, t_cycles, 1))
+    real_result_np = np.tile(real_result, (1, t_cycles))
+    stable_real_result_np = np.tile(stable_real_result, (1, t_cycles))
 
     # Creates the unstable boolean vector
     unstable_real_result_np = real_result_np & ~stable_real_result_np
