@@ -3,11 +3,9 @@ module FindEquilibria
 using HomotopyContinuation, LinearAlgebra, CriticalTransitions, DynamicalSystems, ThreadsX
 
 @kwdef mutable struct RealSolution
-    realStable::Matrix{Float64}
-    realUnstable::Matrix{Float64}
-    timesStable::Vector{Float64}
-    timesUnstable::Vector{Float64}
+    solutionEvolution::Matrix{Float64}
     maskStable::Vector{Bool}
+    maskUnstable::Vector{Bool}
     transitionActions::Vector{Vector{Tuple{Int, Float64}}}
 end
 
@@ -293,15 +291,14 @@ function create_structs(n::Int, times::AbstractVector{Float64}, ω_val::Float64,
     sol_struct_array = Vector{RealSolution}(undef, N_sol)
 
     for i in 1:N_sol
-        in1 = real(result[i, stablereal_result[i, :], :])
-        in2 = real(result[i, unstablereal_result[i, :], :])
-        in3 = times[stablereal_result[i, :]]
-        in4 = times[unstablereal_result[i, :]]
-        sol_struct_array[i] = RealSolution(realStable = in1, realUnstable = in2, timesStable = in3, timesUnstable = in4, maskStable = stablereal_result[i, :], transitionActions = Vector{Vector{Tuple{Int, Float64}}}())
+        in1 = real(result[i, :, :])
+        in2 = stablereal_result[i, :]
+        in3 = unstablereal_result[i, :]
+        sol_struct_array[i] = RealSolution(solutionEvolution = in1, maskStable = in2, maskUnstable = in3, transitionActions = Vector{Vector{Tuple{Int, Float64}}}())
     end
 
     for i in 1:N_sol
-        
+
     end
 
     return sol_struct_array

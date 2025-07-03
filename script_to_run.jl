@@ -109,13 +109,12 @@ allStructs = FindEquilibria.create_structs(n, times, ω, r0, r1; fast = true, N=
 p = plot(xlabel=L"t", ylabel=L"x_0(t)", legend = true)
 
 for str in allStructs
-    if (size(str.timesStable)[1] > 0)
-        plot!(p, str.timesStable, str.realStable[:, 1], seriestype = :scatter, markerstrokewidth = 0)
+    if (sum(str.maskStable) > 0)
+        plot!(p, times[str.maskStable], str.solutionEvolution[str.maskStable, 1], seriestype = :scatter, markerstrokewidth = 0)
     end
-    if (size(str.timesUnstable)[1] > 0)
-        #plot!(p, str.timesUnstable, str.realUnstable[:, 1], seriestype = :scatter, markerstrokewidth = 0, markersize = 1)
+    if (sum(str.maskUnstable) > 0)
+        #plot!(p, times[str.maskUnstable], str.solutionEvolution[str.maskUnstable, 1], seriestype = :scatter, markerstrokewidth = 0, markersize = 1)
     end
-    #plot!(p, str.timesUnstable, str.realUnstable[:, 1], seriestype = :scatter, markerstrokewidth = 0, markersize = 1)
 end
 
 display(p)
